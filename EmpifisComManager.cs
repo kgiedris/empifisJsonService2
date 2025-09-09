@@ -1,4 +1,4 @@
-﻿using Empirija;
+﻿//using Empirija;
 using NLog;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Options;
@@ -11,7 +11,7 @@ namespace empifisJsonAPI2
     public class EmpifisComManager
     {
         private static readonly NLog.ILogger _logger = LogManager.GetCurrentClassLogger();
-        private Empirija.EmpiFisX _comObject;
+        private Interop.Empirija.EmpiFisX _comObject;
         private readonly int _comTimeoutSeconds;
         private bool _isInitializing = false;
 
@@ -28,7 +28,7 @@ namespace empifisJsonAPI2
             try
             {
                 _logger.Info("Attempting to load the Empirija COM object.");
-                _comObject = new Empirija.EmpiFisX();
+                _comObject = new Interop.Empirija.EmpiFisX();
                 _logger.Info("Empirija COM object loaded successfully.");
             }
             catch (Exception ex)

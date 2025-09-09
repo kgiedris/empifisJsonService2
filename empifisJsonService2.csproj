@@ -4,21 +4,16 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <UserSecretsId>dotnet-empifisJsonService2-9decb414-8651-4939-9863-7c0178ee3a9b</UserSecretsId>
+    <UserSecretsId>dotnet-empifisJsonService2-9decb414-8651-4939-9863-c36178ee3a9b</UserSecretsId>
     <Platforms>AnyCPU;x86</Platforms>
+    <EnableComHosting>true</EnableComHosting>
   </PropertyGroup>
 
   <ItemGroup>
-    <COMReference Include="Empirija">
-      <WrapperTool>tlbimp</WrapperTool>
-      <VersionMinor>0</VersionMinor>
-      <VersionMajor>5</VersionMajor>
-      <Guid>9859263e-c1f5-42af-9cb1-352955c0f3eb</Guid>
-      <Lcid>0</Lcid>
-      <Isolated>false</Isolated>
-      <EmbedInteropTypes>true</EmbedInteropTypes>
-    </COMReference>
-
+    <Reference Include="Empirija">
+        <HintPath>$(MSBuildProjectDirectory)\Interop.Empirija.dll</HintPath>
+        <EmbedInteropTypes>true</EmbedInteropTypes>
+    </Reference>
   </ItemGroup>
 
   <ItemGroup>
@@ -29,10 +24,6 @@
     <PackageReference Include="NLog.Extensions.Hosting" Version="6.0.3" />
     <PackageReference Include="NLog.Extensions.Logging" Version="6.0.3" />
     <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing" Version="9.0.8" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <FrameworkReference Include="Microsoft.WindowsDesktop.App.WindowsForms" />
   </ItemGroup>
 
   <ItemGroup>
