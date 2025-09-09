@@ -3,6 +3,8 @@ using NLog;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Options;
 using System.Threading.Tasks;
+using System;
+using System.Reflection;
 
 namespace empifisJsonAPI2
 {
@@ -40,8 +42,7 @@ namespace empifisJsonAPI2
             }
         }
 
-        // Generic method to wrap COM calls with no arguments
-        private int CallComMethod(Func<int> comMethod, string methodName)
+        private int ExecuteComMethod(Func<int> comMethod, string methodName)
         {
             if (_comObject == null)
             {
@@ -49,88 +50,83 @@ namespace empifisJsonAPI2
                 InitializeComObject();
                 if (_comObject == null) return 999;
             }
+
             try
             {
                 var task = Task.Run(comMethod);
-                if (task.Wait(TimeSpan.FromSeconds(_comTimeoutSeconds))) return task.Result;
+                if (task.Wait(TimeSpan.FromSeconds(_comTimeoutSeconds)))
+                {
+                    _logger.Debug($"COM method '{methodName}' completed successfully.");
+                    return task.Result;
+                }
+
+                _logger.Warn($"COM method '{methodName}' timed out. Reloading object.");
                 ReloadComObject();
                 return 999;
             }
-            catch (COMException ex) { _logger.Error(ex, $"COMException occurred during '{methodName}'. Reloading object."); ReloadComObject(); return ex.ErrorCode; }
-            catch (Exception ex) { _logger.Error(ex, $"An unexpected error occurred during '{methodName}'. Reloading object."); ReloadComObject(); return 999; }
-        }
-
-        // Generic method to wrap COM calls with arguments
-        private int CallComMethodWithArgs(Func<int> comMethodWithArgs, string methodName)
-        {
-            if (_comObject == null)
+            catch (COMException ex)
             {
-                _logger.Warn($"COM object is not initialized. Attempting to re-initialize for '{methodName}'.");
-                InitializeComObject();
-                if (_comObject == null) return 999;
+                _logger.Error(ex, $"COMException occurred during '{methodName}'. Reloading object.");
+                ReloadComObject();
+                return ex.ErrorCode;
             }
-            try
+            catch (Exception ex)
             {
-                var task = Task.Run(comMethodWithArgs);
-                if (task.Wait(TimeSpan.FromSeconds(_comTimeoutSeconds))) return task.Result;
+                _logger.Error(ex, $"An unexpected error occurred during '{methodName}'. Reloading object.");
                 ReloadComObject();
                 return 999;
             }
-            catch (COMException ex) { _logger.Error(ex, $"COMException occurred during '{methodName}'. Reloading object."); ReloadComObject(); return ex.ErrorCode; }
-            catch (Exception ex) { _logger.Error(ex, $"An unexpected error occurred during '{methodName}'. Reloading object."); ReloadComObject(); return 999; }
         }
 
-        // Dedicated wrapper methods for each COM call
-        public int ResetFiscal() => CallComMethod(() => _comObject.ResetFiscal(), "ResetFiscal");
-        public int PrintXReport() => CallComMethod(() => _comObject.PrintXReport(), "PrintXReport");
-        public int MoneyInCurr(int paymentType, double amount) => CallComMethodWithArgs(() => _comObject.MoneyInCurr(paymentType, amount), "MoneyInCurr");
-        public int MoneyOutCurr(int paymentType, double amount) => CallComMethodWithArgs(() => _comObject.MoneyOutCurr(paymentType, amount), "MoneyOutCurr");
-        public int OpenCashDrawer() => CallComMethod(() => _comObject.OpenCashDrawer(), "OpenCashDrawer");
-        public int SkipPrintReceipt() => CallComMethod(() => _comObject.SkipPrintReceipt(), "SkipPrintReceipt");
-        public int PrintZReport() => CallComMethod(() => _comObject.PrintZReport(), "PrintZReport");
-        public int PrintMiniXReport() => CallComMethod(() => _comObject.PrintMiniXReport(), "PrintMiniXReport");
-        public int PrintSumPeriodicReport(string dateFrom, string dateTo) => CallComMethodWithArgs(() => _comObject.PrintSumPeriodicReport(dateFrom, dateTo), "PrintSumPeriodicReport");
-        public int PrintPeriodicReport(string dateFrom, string dateTo) => CallComMethodWithArgs(() => _comObject.PrintPeriodicReport(dateFrom, dateTo), "PrintPeriodicReport");
-        public int PrintSumPeriodicReportByNumber(int noFrom, int noTo) => CallComMethodWithArgs(() => _comObject.PrintSumPeriodicReportByNumber(noFrom, noTo), "PrintSumPeriodicReportByNumber");
-        public int PrintPeriodicReportByNumber(int noFrom, int noTo) => CallComMethodWithArgs(() => _comObject.PrintPeriodicReportByNumber(noFrom, noTo), "PrintPeriodicReportByNumber");
-        public int CustomerDisplay2(string line1, string line2) => CallComMethodWithArgs(() => _comObject.CustomerDisplay2(line1, line2), "CustomerDisplay2");
-        public int CustomerDisplayPro(string line) => CallComMethodWithArgs(() => _comObject.CustomerDisplayPro(line), "CustomerDisplayPro");
-        public int BeginNonFiscalReceipt() => CallComMethod(() => _comObject.BeginNonFiscalReceipt(), "BeginNonFiscalReceipt");
-        public int PrintTareItem(string description, double quantity, double price) => CallComMethodWithArgs(() => _comObject.PrintTareItem(description, quantity, price), "PrintTareItem");
-        public int PrintTareItemVoid(string description, double quantity, double price) => CallComMethodWithArgs(() => _comObject.PrintTareItemVoid(description, quantity, price), "PrintTareItemVoid");
-        public int PrintDepositReceive(string description, double quantity, double price) => CallComMethodWithArgs(() => _comObject.PrintDepositReceive(description, quantity, price), "PrintDepositReceive");
-        public int PrintDepositReceiveCredit(string description, double quantity, double price) => CallComMethodWithArgs(() => _comObject.PrintDepositReceiveCredit(description, quantity, price), "PrintDepositReceiveCredit");
-        public int PrintDepositRefund(string description, double quantity, double price) => CallComMethodWithArgs(() => _comObject.PrintDepositRefund(description, quantity, price), "PrintDepositRefund");
-        public int PrintBarCode(int system, int height, string barCode) => CallComMethodWithArgs(() => _comObject.PrintBarCode(system, height, barCode), "PrintBarCode");
-        public int PrintNonFiscalLine(string line, int attrib) => CallComMethodWithArgs(() => _comObject.PrintNonFiscalLine(line, attrib), "PrintNonFiscalLine");
-        public int EndNonFiscalReceipt() => CallComMethod(() => _comObject.EndNonFiscalReceipt(), "EndNonFiscalReceipt");
-        public int BeginFiscalReceipt() => CallComMethod(() => _comObject.BeginFiscalReceipt(), "BeginFiscalReceipt");
-        public int PrintRecItem(string itemDescription, double itemQuantity, double itemPrice, int vatID, string itemUnit) => CallComMethodWithArgs(() => _comObject.PrintRecItem(itemDescription, itemQuantity, itemPrice, vatID, itemUnit), "PrintRecItem");
-        public int PrintRecItemEx(string description, double quantity, double price, int vat, string dimension, string group) => CallComMethodWithArgs(() => _comObject.PrintRecItemEx(description, quantity, price, vat, dimension, group), "PrintRecItemEx");
-        public int ItemReturn(string description, double quantity, double price, int vat, string dimension, double currPercent, double currAbsolute) => CallComMethodWithArgs(() => _comObject.ItemReturn(description, quantity, price, vat, dimension, currPercent, currAbsolute), "ItemReturn");
-        public int ItemReturnEx(string description, double quantity, double price, int vat, string dimension, string group, double currPercent, double currAbsolute) => CallComMethodWithArgs(() => _comObject.ItemReturnEx(description, quantity, price, vat, dimension, group, currPercent, currAbsolute), "ItemReturnEx");
-        public int PrintDepositReceiveVoid(string description, double quantity, double price) => CallComMethodWithArgs(() => _comObject.PrintDepositReceiveVoid(description, quantity, price), "PrintDepositReceiveVoid");
-        public int PrintCommentLine(string commentLine, int commentLineAttrib) => CallComMethodWithArgs(() => _comObject.PrintCommentLine(commentLine, commentLineAttrib), "PrintCommentLine");
-        public int DiscountAdditionForItem(int type, double amount) => CallComMethodWithArgs(() => _comObject.DiscountAdditionForItem(type, amount), "DiscountAdditionForItem");
-        public int DiscountAdditionForReceipt(int type, double amount) => CallComMethodWithArgs(() => _comObject.DiscountAdditionForReceipt(type, amount), "DiscountAdditionForReceipt");
-        public int TransferPreReceipt(string receiptNo, double amount) => CallComMethodWithArgs(() => _comObject.TransferPreReceipt(receiptNo, amount), "TransferPreReceipt");
-        public int EndPreReceipt() => CallComMethod(() => _comObject.EndPreReceipt(), "EndPreReceipt");
-        public int LinkPreReceipt(string receiptNo, double amount) => CallComMethodWithArgs(() => _comObject.LinkPreReceipt(receiptNo, amount), "LinkPreReceipt");
-        public int EndFiscalReceiptCurr(double rCash, double credit1, double credit2, double credit3, double credit4, double rCurrency1, double rCurrency2, double rCurrency3) => CallComMethodWithArgs(() => _comObject.EndFiscalReceiptCurr(rCash, credit1, credit2, credit3, credit4, rCurrency1, rCurrency2, rCurrency3), "EndFiscalReceiptCurr");
-        public int SetCustomerContact(string contact) => CallComMethodWithArgs(() => _comObject.SetCustomerContact(contact), "SetCustomerContact");
-        public int RefundReceiptInfo(string eCR, string receiptNo, string docNo) => CallComMethodWithArgs(() => _comObject.RefundReceiptInfo(eCR, receiptNo, docNo), "RefundReceiptInfo");
-        public int GoodsReturnCurr(double rCash, double credit1, double credit2, double credit3, double credit4, double rCurrency1, double rCurrency2, double rCurrency3) => CallComMethodWithArgs(() => _comObject.GoodsReturnCurr(rCash, credit1, credit2, credit3, credit4, rCurrency1, rCurrency2, rCurrency3), "GoodsReturnCurr");
-        public int EndFiscalReceiptEx(double rCash, double credit1, double credit2, double credit3, double credit4, double credit5, double credit6, double credit7, double credit8) => CallComMethodWithArgs(() => _comObject.EndFiscalReceiptEx(rCash, credit1, credit2, credit3, credit4, credit5, credit6, credit7, credit8), "EndFiscalReceiptEx");
-        public int GoodsReturnEx(double rCash, double credit1, double credit2, double credit3, double credit4, double credit5, double credit6, double credit7, double credit8) => CallComMethodWithArgs(() => _comObject.GoodsReturnEx(rCash, credit1, credit2, credit3, credit4, credit5, credit6, credit7, credit8), "GoodsReturnEx");
-        public int EndRecPaymentEx(double rCash, double credit1, double credit2, double credit3, double credit4, double credit5, double credit6, double credit7, double credit8) => CallComMethodWithArgs(() => _comObject.EndRecPaymentEx(rCash, credit1, credit2, credit3, credit4, credit5, credit6, credit7, credit8), "EndRecPaymentEx");
-        public int EndFiscalCacheReceipt() => CallComMethod(() => _comObject.EndFiscalCacheReceipt(), "EndFiscalCacheReceipt");
-        public int GoodsReturnCacheReceipt() => CallComMethod(() => _comObject.GoodsReturnCacheReceipt(), "GoodsReturnCacheReceipt");
-        public int EndRecPayment(double rCash, double credit1, double credit2, double credit3, double credit4, double rCurrency1, double rCurrency2, double rCurrency3) => CallComMethodWithArgs(() => _comObject.EndRecPayment(rCash, credit1, credit2, credit3, credit4, rCurrency1, rCurrency2, rCurrency3), "EndRecPayment");
-        public int PrintCopyOfLastReceipt() => CallComMethod(() => _comObject.PrintCopyOfLastReceipt(), "PrintCopyOfLastReceipt");
-        public int PrintCopyOfReceipt(int from, int to) => CallComMethodWithArgs(() => _comObject.PrintCopyOfReceipt(from, to), "PrintCopyOfReceipt");
-        public int SetFooter(string line1, string line2, string line3, string line4) => CallComMethodWithArgs(() => _comObject.SetFooter(64, line1, 64, line2, 64, line3, 64, line4), "SetFooter");
+        public int ResetFiscal() => ExecuteComMethod(() => _comObject.ResetFiscal(), nameof(ResetFiscal));
+        public int PrintXReport() => ExecuteComMethod(() => _comObject.PrintXReport(), nameof(PrintXReport));
+        public int MoneyInCurr(int paymentType, double amount) => ExecuteComMethod(() => _comObject.MoneyInCurr(paymentType, amount), nameof(MoneyInCurr));
+        public int MoneyOutCurr(int paymentType, double amount) => ExecuteComMethod(() => _comObject.MoneyOutCurr(paymentType, amount), nameof(MoneyOutCurr));
+        public int OpenCashDrawer() => ExecuteComMethod(() => _comObject.OpenCashDrawer(), nameof(OpenCashDrawer));
+        public int SkipPrintReceipt() => ExecuteComMethod(() => _comObject.SkipPrintReceipt(), nameof(SkipPrintReceipt));
+        public int PrintZReport() => ExecuteComMethod(() => _comObject.PrintZReport(), nameof(PrintZReport));
+        public int PrintMiniXReport() => ExecuteComMethod(() => _comObject.PrintMiniXReport(), nameof(PrintMiniXReport));
+        public int PrintSumPeriodicReport(string dateFrom, string dateTo) => ExecuteComMethod(() => _comObject.PrintSumPeriodicReport(dateFrom, dateTo), nameof(PrintSumPeriodicReport));
+        public int PrintPeriodicReport(string dateFrom, string dateTo) => ExecuteComMethod(() => _comObject.PrintPeriodicReport(dateFrom, dateTo), nameof(PrintPeriodicReport));
+        public int PrintSumPeriodicReportByNumber(int noFrom, int noTo) => ExecuteComMethod(() => _comObject.PrintSumPeriodicReportByNumber(noFrom, noTo), nameof(PrintSumPeriodicReportByNumber));
+        public int PrintPeriodicReportByNumber(int noFrom, int noTo) => ExecuteComMethod(() => _comObject.PrintPeriodicReportByNumber(noFrom, noTo), nameof(PrintPeriodicReportByNumber));
+        public int CustomerDisplay2(string line1, string line2) => ExecuteComMethod(() => _comObject.CustomerDisplay2(line1, line2), nameof(CustomerDisplay2));
+        public int CustomerDisplayPro(string line) => ExecuteComMethod(() => _comObject.CustomerDisplayPro(line), nameof(CustomerDisplayPro));
+        public int BeginNonFiscalReceipt() => ExecuteComMethod(() => _comObject.BeginNonFiscalReceipt(), nameof(BeginNonFiscalReceipt));
+        public int PrintTareItem(string description, double quantity, double price) => ExecuteComMethod(() => _comObject.PrintTareItem(description, quantity, price), nameof(PrintTareItem));
+        public int PrintTareItemVoid(string description, double quantity, double price) => ExecuteComMethod(() => _comObject.PrintTareItemVoid(description, quantity, price), nameof(PrintTareItemVoid));
+        public int PrintDepositReceive(string description, double quantity, double price) => ExecuteComMethod(() => _comObject.PrintDepositReceive(description, quantity, price), nameof(PrintDepositReceive));
+        public int PrintDepositReceiveCredit(string description, double quantity, double price) => ExecuteComMethod(() => _comObject.PrintDepositReceiveCredit(description, quantity, price), nameof(PrintDepositReceiveCredit));
+        public int PrintDepositRefund(string description, double quantity, double price) => ExecuteComMethod(() => _comObject.PrintDepositRefund(description, quantity, price), nameof(PrintDepositRefund));
+        public int PrintBarCode(int system, int height, string barCode) => ExecuteComMethod(() => _comObject.PrintBarCode(system, height, barCode), nameof(PrintBarCode));
+        public int PrintNonFiscalLine(string line, int attrib) => ExecuteComMethod(() => _comObject.PrintNonFiscalLine(line, attrib), nameof(PrintNonFiscalLine));
+        public int EndNonFiscalReceipt() => ExecuteComMethod(() => _comObject.EndNonFiscalReceipt(), nameof(EndNonFiscalReceipt));
+        public int BeginFiscalReceipt() => ExecuteComMethod(() => _comObject.BeginFiscalReceipt(), nameof(BeginFiscalReceipt));
+        public int PrintRecItem(string itemDescription, double itemQuantity, double itemPrice, int vatID, string itemUnit) => ExecuteComMethod(() => _comObject.PrintRecItem(itemDescription, itemQuantity, itemPrice, vatID, itemUnit), nameof(PrintRecItem));
+        public int PrintRecItemEx(string description, double quantity, double price, int vat, string dimension, string group) => ExecuteComMethod(() => _comObject.PrintRecItemEx(description, quantity, price, vat, dimension, group), nameof(PrintRecItemEx));
+        public int ItemReturn(string description, double quantity, double price, int vat, string dimension, double currPercent, double currAbsolute) => ExecuteComMethod(() => _comObject.ItemReturn(description, quantity, price, vat, dimension, currPercent, currAbsolute), nameof(ItemReturn));
+        public int ItemReturnEx(string description, double quantity, double price, int vat, string dimension, string group, double currPercent, double currAbsolute) => ExecuteComMethod(() => _comObject.ItemReturnEx(description, quantity, price, vat, dimension, group, currPercent, currAbsolute), nameof(ItemReturnEx));
+        public int PrintDepositReceiveVoid(string description, double quantity, double price) => ExecuteComMethod(() => _comObject.PrintDepositReceiveVoid(description, quantity, price), nameof(PrintDepositReceiveVoid));
+        public int PrintCommentLine(string commentLine, int commentLineAttrib) => ExecuteComMethod(() => _comObject.PrintCommentLine(commentLine, commentLineAttrib), nameof(PrintCommentLine));
+        public int DiscountAdditionForItem(int type, double amount) => ExecuteComMethod(() => _comObject.DiscountAdditionForItem(type, amount), nameof(DiscountAdditionForItem));
+        public int DiscountAdditionForReceipt(int type, double amount) => ExecuteComMethod(() => _comObject.DiscountAdditionForReceipt(type, amount), nameof(DiscountAdditionForReceipt));
+        public int TransferPreReceipt(string receiptNo, double amount) => ExecuteComMethod(() => _comObject.TransferPreReceipt(receiptNo, amount), nameof(TransferPreReceipt));
+        public int EndPreReceipt() => ExecuteComMethod(() => _comObject.EndPreReceipt(), nameof(EndPreReceipt));
+        public int LinkPreReceipt(string receiptNo, double amount) => ExecuteComMethod(() => _comObject.LinkPreReceipt(receiptNo, amount), nameof(LinkPreReceipt));
+        public int EndFiscalReceiptCurr(double rCash, double credit1, double credit2, double credit3, double credit4, double rCurrency1, double rCurrency2, double rCurrency3) => ExecuteComMethod(() => _comObject.EndFiscalReceiptCurr(rCash, credit1, credit2, credit3, credit4, rCurrency1, rCurrency2, rCurrency3), nameof(EndFiscalReceiptCurr));
+        public int SetCustomerContact(string contact) => ExecuteComMethod(() => _comObject.SetCustomerContact(contact), nameof(SetCustomerContact));
+        public int RefundReceiptInfo(string eCR, string receiptNo, string docNo) => ExecuteComMethod(() => _comObject.RefundReceiptInfo(eCR, receiptNo, docNo), nameof(RefundReceiptInfo));
+        public int GoodsReturnCurr(double rCash, double credit1, double credit2, double credit3, double credit4, double rCurrency1, double rCurrency2, double rCurrency3) => ExecuteComMethod(() => _comObject.GoodsReturnCurr(rCash, credit1, credit2, credit3, credit4, rCurrency1, rCurrency2, rCurrency3), nameof(GoodsReturnCurr));
+        public int EndFiscalReceiptEx(double rCash, double credit1, double credit2, double credit3, double credit4, double credit5, double credit6, double credit7, double credit8) => ExecuteComMethod(() => _comObject.EndFiscalReceiptEx(rCash, credit1, credit2, credit3, credit4, credit5, credit6, credit7, credit8), nameof(EndFiscalReceiptEx));
+        public int GoodsReturnEx(double rCash, double credit1, double credit2, double credit3, double credit4, double credit5, double credit6, double credit7, double credit8) => ExecuteComMethod(() => _comObject.GoodsReturnEx(rCash, credit1, credit2, credit3, credit4, credit5, credit6, credit7, credit8), nameof(GoodsReturnEx));
+        public int EndRecPaymentEx(double rCash, double credit1, double credit2, double credit3, double credit4, double credit5, double credit6, double credit7, double credit8) => ExecuteComMethod(() => _comObject.EndRecPaymentEx(rCash, credit1, credit2, credit3, credit4, credit5, credit6, credit7, credit8), nameof(EndRecPaymentEx));
+        public int EndFiscalCacheReceipt() => ExecuteComMethod(() => _comObject.EndFiscalCacheReceipt(), nameof(EndFiscalCacheReceipt));
+        public int GoodsReturnCacheReceipt() => ExecuteComMethod(() => _comObject.GoodsReturnCacheReceipt(), nameof(GoodsReturnCacheReceipt));
+        public int EndRecPayment(double rCash, double credit1, double credit2, double credit3, double credit4, double rCurrency1, double rCurrency2, double rCurrency3) => ExecuteComMethod(() => _comObject.EndRecPayment(rCash, credit1, credit2, credit3, credit4, rCurrency1, rCurrency2, rCurrency3), nameof(EndRecPayment));
+        public int PrintCopyOfLastReceipt() => ExecuteComMethod(() => _comObject.PrintCopyOfLastReceipt(), nameof(PrintCopyOfLastReceipt));
+        public int PrintCopyOfReceipt(int from, int to) => ExecuteComMethod(() => _comObject.PrintCopyOfReceipt(from, to), nameof(PrintCopyOfReceipt));
+        public int SetFooter(string line1, string line2, string line3, string line4) => ExecuteComMethod(() => _comObject.SetFooter(64, line1, 64, line2, 64, line3, 64, line4), nameof(SetFooter));
 
-        // This method handles the ref parameter and cannot use the generic wrapper
         public (int errorCode, string message) GetFiscalInfo(int infoType)
         {
             string message = "";
@@ -148,7 +144,8 @@ namespace empifisJsonAPI2
 
             try
             {
-                var task = Task.Run(() => {
+                var task = Task.Run(() =>
+                {
                     string tempMessage = "";
                     int tempCode = _comObject.GetFiscalInfo(infoType, ref tempMessage);
                     return (tempCode, tempMessage);

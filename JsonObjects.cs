@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace empifisJsonAPI2.JsonObjects
 {
@@ -62,14 +63,9 @@ namespace empifisJsonAPI2.JsonObjects
         public ReceiptJson()
         {
             this.ReceiptType = string.Empty;
-            this.FiscalReceipt = new FiscalReceipt();
-            this.NonFiscalReceipt = new NonFiscalReceipt();
-            this.Report = new Report();
-            this.SpecialFunction = new SpecialFunction();
-            this.GetFiscalInfo = new GetFiscalInfoParams();
+            // The JSON deserializer will create these if present.
             this.TopCommentLines = new List<CommentLines>();
             this.BottomCommentLines = new List<CommentLines>();
-            this.SetFooter = new SetFooter();
         }
     }
 
@@ -86,11 +82,6 @@ namespace empifisJsonAPI2.JsonObjects
 
         public FiscalReceipt()
         {
-            this.ReceiptPayment = new ReceiptPayment();
-            this.ReceiptPaymentEx = new ReceiptPaymentEx();
-            this.ReceiptDiscount = new ReceiptDiscount();
-            this.EndPreReceipt = new EndPreReceipt();
-            this.SetFooter = new SetFooter();
             this.ReceiptItem = new List<ReceiptItems>();
             this.DepositReceive = new List<DepositReceive>();
             this.LinkPreReceipt = new List<LinkPreReceipts>();
@@ -108,11 +99,6 @@ namespace empifisJsonAPI2.JsonObjects
 
         public ReturnReceipt()
         {
-            this.GoodsReturnPayment = new GoodsReturnPayment();
-            this.GoodsReturnPaymentEx = new GoodsReturnPaymentEx();
-            this.ReceiptDiscount = new ReceiptDiscount();
-            this.RefundReceiptInfo = new RefundReceiptInfo();
-            this.ReturnReceiptInfo = new ReturnReceiptInfo();
             this.ReceiptItem = new List<ReceiptItems>();
         }
     }
@@ -171,7 +157,7 @@ namespace empifisJsonAPI2.JsonObjects
             this.ItemDescription = string.Empty;
             this.ItemUnit = "vnt";
             this.ItemGroup = "GR";
-            this.ItemDiscount = new ItemDiscount();
+            // Removed default initialization of ItemDiscount
             this.CommentLines = new List<CommentLines>();
         }
     }
