@@ -48,7 +48,6 @@ namespace empifisJsonAPI2
             else
             {
                 _logger.Info("File processing mode is OFF. Worker is running in the background but will not process files.");
-                // The worker still runs, so the application won't stop.
                 while (!stoppingToken.IsCancellationRequested)
                 {
                     await Task.Delay(10000, stoppingToken);
@@ -84,7 +83,6 @@ namespace empifisJsonAPI2
                     _logger.Error(ex, "An error occurred in the file monitor loop.");
                 }
 
-                // Wait for 10 seconds before checking again
                 await Task.Delay(10000, stoppingToken);
             }
         }
@@ -94,7 +92,6 @@ namespace empifisJsonAPI2
             string jsonContent;
             try
             {
-                // Read the JSON content from the file
                 jsonContent = await File.ReadAllTextAsync(filePath);
                 _logger.Info($"Read JSON from file:\n{jsonContent}");
             }
@@ -126,15 +123,47 @@ namespace empifisJsonAPI2
                 jsonResponse.ErrorMessage = ex.Message;
             }
 
-            // Log the entire outgoing JSON response before writing to file
+            // Conditionally create and serialize the response based on the configuration
             var jsonSerializerSettings = new JsonSerializerSettings
             {
                 NullValueHandling = NullValueHandling.Ignore,
                 Formatting = Formatting.Indented
             };
-            string responseJsonString = JsonConvert.SerializeObject(jsonResponse, jsonSerializerSettings);
-            _logger.Info($"Response for file '{Path.GetFileName(filePath)}':\n{responseJsonString}");
+            string responseJsonString;
 
+            if (_config.servicePort.radison_error?.ToLower() == "on")
+            {
+                _logger.Info("Radison error mode is ON. Creating ResponseJsonRadison.");
+                var jsonResponseRadison = new ResponseJsonRadison
+                {
+                    ErrorCode = jsonResponse.ErrorCode,
+                    ErrorMessage = jsonResponse.ErrorMessage
+                };
+
+                // Get Fiscal Info for CashRegisterNo
+                var fiscalInfoCashRegister = _comManager.GetFiscalInfo(3);
+                jsonResponseRadison.CashRegisterNo = fiscalInfoCashRegister.message;
+
+                // Get Fiscal Info for ReceiptNo
+                var fiscalInfoReceiptNo = _comManager.GetFiscalInfo(2);
+                if (int.TryParse(fiscalInfoReceiptNo.message, out int recNo))
+                {
+                    jsonResponseRadison.ReceiptNo = (recNo - 1).ToString();
+                }
+                else
+                {
+                    _logger.Warn($"Could not parse ReceiptNo from COM object: '{fiscalInfoReceiptNo.message}'");
+                    jsonResponseRadison.ReceiptNo = "N/A";
+                }
+
+                responseJsonString = JsonConvert.SerializeObject(jsonResponseRadison, jsonSerializerSettings);
+            }
+            else
+            {
+                responseJsonString = JsonConvert.SerializeObject(jsonResponse, jsonSerializerSettings);
+            }
+
+            _logger.Info($"Response for file '{Path.GetFileName(filePath)}':\n{responseJsonString}");
             await WriteResponseFile(filePath, responseJsonString);
 
             // Delete the original file
@@ -149,11 +178,10 @@ namespace empifisJsonAPI2
             }
         }
 
-        private async Task WriteResponseFile(string originalFilePath, string responseJson)
+        private async Task WriteResponseFile(string originalFilePath, string responseJsonString)
         {
             try
             {
-                // Clear the output directory first
                 if (Directory.Exists(_config.JsonPathConfig.OutFilePath))
                 {
                     var existingFiles = Directory.EnumerateFiles(_config.JsonPathConfig.OutFilePath);
@@ -171,7 +199,7 @@ namespace empifisJsonAPI2
                 string newFileName = originalFileName.Replace("inReceipt", "outReceipt");
                 string newFilePath = Path.Combine(_config.JsonPathConfig.OutFilePath, newFileName);
 
-                await File.WriteAllTextAsync(newFilePath, responseJson);
+                await File.WriteAllTextAsync(newFilePath, responseJsonString);
                 _logger.Info($"Response written to file: {newFilePath}");
             }
             catch (Exception ex)
