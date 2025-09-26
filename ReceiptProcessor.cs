@@ -15,15 +15,18 @@ namespace empifisJsonAPI2
             _comManager = comManager;
         }
 
-        public int ProcessReceipt(ReceiptJson jsonReceipt)
+        public (int errorCode, string message) ProcessReceipt(ReceiptJson jsonReceipt)
         {
             if (jsonReceipt == null || string.IsNullOrEmpty(jsonReceipt.ReceiptType))
             {
                 _logger.Warn("Received a null or invalid JSON receipt.");
-                return 999;
+                return (999, "Invalid JSON receipt.");
             }
 
+            // Declared here to be visible across the entire function
             int errorCode = 0;
+            string message = "";
+
             try
             {
                 switch (jsonReceipt.ReceiptType.ToLower())
@@ -43,25 +46,32 @@ namespace empifisJsonAPI2
                     case "special":
                         errorCode = ProcessSpecialFunction(jsonReceipt.SpecialFunction);
                         break;
+
                     case "getfiscalinfo":
                         if (jsonReceipt.GetFiscalInfo != null)
                         {
                             var infoResult = _comManager.GetFiscalInfo(jsonReceipt.GetFiscalInfo.InfoType);
+
                             errorCode = infoResult.errorCode;
-                            _logger.Info($"Fiscal Info Result: {infoResult.message}");
+                            message = infoResult.message; // CAPTURES FISCAL DATA
+
+                            _logger.Info($"Fiscal Info Result: {message}");
                         }
                         else
                         {
                             _logger.Warn("Missing 'getFiscalInfo' object for 'getfiscalinfo' command.");
                             errorCode = 999;
+                            message = "Missing 'getFiscalInfo' object.";
                         }
-                        break;
+                        return (errorCode, message); // Returns early to preserve the custom message
+
                     case "reset":
                         errorCode = _comManager.ResetFiscal();
                         break;
                     default:
                         _logger.Warn($"Invalid or unsupported ReceiptType: {jsonReceipt.ReceiptType}");
                         errorCode = 999;
+                        message = $"Invalid or unsupported ReceiptType: {jsonReceipt.ReceiptType}";
                         break;
                 }
             }
@@ -69,14 +79,26 @@ namespace empifisJsonAPI2
             {
                 _logger.Error(ex, "An exception occurred while processing a receipt.");
                 errorCode = 999;
+                message = ex.Message; // Captures exception message
             }
 
+            // Final checks before returning the standard receipt result
             if (errorCode != 0)
             {
                 _comManager.ResetFiscal();
+                // If message is empty (i.e., not set by the catch block), provide a generic error
+                if (string.IsNullOrEmpty(message))
+                {
+                    message = "Error during receipt processing.";
+                }
+            }
+            else if (string.IsNullOrEmpty(message))
+            {
+                // Set default success message if the execution was clean
+                message = "Success";
             }
 
-            return errorCode;
+            return (errorCode, message);
         }
 
         private int ProcessFiscalReceipt(FiscalReceipt fiscalReceipt, ReceiptJson jsonReceipt)

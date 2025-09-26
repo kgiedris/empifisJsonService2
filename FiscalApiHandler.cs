@@ -1,11 +1,13 @@
 ﻿using empifisJsonAPI2.JsonObjects;
-using Microsoft.AspNetCore.Mvc;
-using Newtonsoft.Json;
-using NLog;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
-using System.IO;
+using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration; // Add this using directive
+using Microsoft.Extensions.DependencyInjection;
+using Newtonsoft.Json;
+using NLog;
+using System.IO;
 
 namespace empifisJsonAPI2
 {
@@ -37,7 +39,6 @@ namespace empifisJsonAPI2
                     }
                     else
                     {
-                        // The switch logic from before
                         switch (jsonCommand.Command.ToLower())
                         {
                             case "resetfiscal":
@@ -67,7 +68,380 @@ namespace empifisJsonAPI2
                                     jsonResponse.ErrorMessage = "Missing 'MoneyInCurr' object.";
                                 }
                                 break;
-                            // ... (all other cases from previous code)
+                            case "moneyoutcurr":
+                                if (jsonCommand.MoneyOutCurr != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.MoneyOutCurr(0, jsonCommand.MoneyOutCurr.Amount);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'MoneyOutCurr' object.";
+                                }
+                                break;
+                            case "opencashdrawer":
+                                jsonResponse.ErrorCode = comManager.OpenCashDrawer();
+                                break;
+                            case "skipprintreceipt":
+                                jsonResponse.ErrorCode = comManager.SkipPrintReceipt();
+                                break;
+                            case "printzreport":
+                                jsonResponse.ErrorCode = comManager.PrintZReport();
+                                break;
+                            case "printxreport":
+                                jsonResponse.ErrorCode = comManager.PrintXReport();
+                                break;
+                            case "printminixreport":
+                                jsonResponse.ErrorCode = comManager.PrintMiniXReport();
+                                break;
+                            case "printsumperiodicreport":
+                                if (jsonCommand.PrintSumPeriodicReport != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.PrintSumPeriodicReport(jsonCommand.PrintSumPeriodicReport.dateFrom, jsonCommand.PrintSumPeriodicReport.dateTo);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'PrintSumPeriodicReport' object.";
+                                }
+                                break;
+                            case "printperiodicreport":
+                                if (jsonCommand.PrintPeriodicReport != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.PrintPeriodicReport(jsonCommand.PrintPeriodicReport.dateFrom, jsonCommand.PrintPeriodicReport.dateTo);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'PrintPeriodicReport' object.";
+                                }
+                                break;
+                            case "printsumperiodicreportbynumber":
+                                if (jsonCommand.PrintSumPeriodicReportByNumber != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.PrintSumPeriodicReportByNumber(jsonCommand.PrintSumPeriodicReportByNumber.noFrom, jsonCommand.PrintSumPeriodicReportByNumber.noTo);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'PrintSumPeriodicReportByNumber' object.";
+                                }
+                                break;
+                            case "printperiodicreportbynumber":
+                                if (jsonCommand.PrintPeriodicReportByNumber != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.PrintPeriodicReportByNumber(jsonCommand.PrintPeriodicReportByNumber.noFrom, jsonCommand.PrintPeriodicReportByNumber.noTo);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'PrintPeriodicReportByNumber' object.";
+                                }
+                                break;
+                            case "customerdisplay2":
+                                if (jsonCommand.CustomerDisplay2 != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.CustomerDisplay2(jsonCommand.CustomerDisplay2.Line1, jsonCommand.CustomerDisplay2.Line2);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'CustomerDisplay2' object.";
+                                }
+                                break;
+                            case "customerdisplaypro":
+                                if (jsonCommand.CustomerDisplayPro != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.CustomerDisplayPro(jsonCommand.CustomerDisplayPro.Line);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'CustomerDisplayPro' object.";
+                                }
+                                break;
+                            case "beginnonfiscalreceipt":
+                                jsonResponse.ErrorCode = comManager.BeginNonFiscalReceipt();
+                                break;
+                            case "printtareitem":
+                                if (jsonCommand.PrintTareItem != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.PrintTareItem(jsonCommand.PrintTareItem.Description, jsonCommand.PrintTareItem.Quantity, jsonCommand.PrintTareItem.Price);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'PrintTareItem' object.";
+                                }
+                                break;
+                            case "printtareitemvoid":
+                                if (jsonCommand.PrintTareItemVoid != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.PrintTareItemVoid(jsonCommand.PrintTareItemVoid.Description, jsonCommand.PrintTareItemVoid.Quantity, jsonCommand.PrintTareItemVoid.Price);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'PrintTareItemVoid' object.";
+                                }
+                                break;
+                            case "printdepositreceive":
+                                if (jsonCommand.PrintDepositReceive != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.PrintDepositReceive(jsonCommand.PrintDepositReceive.Description, jsonCommand.PrintDepositReceive.Quantity, jsonCommand.PrintDepositReceive.Price);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'PrintDepositReceive' object.";
+                                }
+                                break;
+                            case "printdepositreceivecredit":
+                                if (jsonCommand.PrintDepositReceiveCredit != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.PrintDepositReceiveCredit(jsonCommand.PrintDepositReceiveCredit.Description, jsonCommand.PrintDepositReceiveCredit.Quantity, jsonCommand.PrintDepositReceiveCredit.Price);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'PrintDepositReceiveCredit' object.";
+                                }
+                                break;
+                            case "printdepositrefund":
+                                if (jsonCommand.PrintDepositRefund != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.PrintDepositRefund(jsonCommand.PrintDepositRefund.Description, jsonCommand.PrintDepositRefund.Quantity, jsonCommand.PrintDepositRefund.Price);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'PrintDepositRefund' object.";
+                                }
+                                break;
+                            case "printbarcode":
+                                if (jsonCommand.PrintBarCode != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.PrintBarCode(jsonCommand.PrintBarCode.System, jsonCommand.PrintBarCode.Height, jsonCommand.PrintBarCode.BarCode);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'PrintBarCode' object.";
+                                }
+                                break;
+                            case "printnonfisc_inline":
+                                if (jsonCommand.PrintNonFiscalLine != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.PrintNonFiscalLine(jsonCommand.PrintNonFiscalLine.Line, jsonCommand.PrintNonFiscalLine.Atrrib);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'PrintNonFiscalLine' object.";
+                                }
+                                break;
+                            case "endnonfiscalreceipt":
+                                jsonResponse.ErrorCode = comManager.EndNonFiscalReceipt();
+                                break;
+                            case "beginfiscalreceipt":
+                                jsonResponse.ErrorCode = comManager.BeginFiscalReceipt();
+                                break;
+                            case "printrecitem":
+                                if (jsonCommand.PrintRecItem != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.PrintRecItem(jsonCommand.PrintRecItem.ItemDescription, jsonCommand.PrintRecItem.ItemQuantity, jsonCommand.PrintRecItem.ItemPrice, jsonCommand.PrintRecItem.VatID, jsonCommand.PrintRecItem.ItemUnit);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'PrintRecItem' object.";
+                                }
+                                break;
+                            case "printrecitemex":
+                                if (jsonCommand.PrintRecItemEx != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.PrintRecItemEx(jsonCommand.PrintRecItemEx.Description, jsonCommand.PrintRecItemEx.Quantity, jsonCommand.PrintRecItemEx.Price, jsonCommand.PrintRecItemEx.Vat, jsonCommand.PrintRecItemEx.Dimension, jsonCommand.PrintRecItemEx.Group);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'PrintRecItemEx' object.";
+                                }
+                                break;
+                            case "itemreturn":
+                                if (jsonCommand.ItemReturn != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.ItemReturn(jsonCommand.ItemReturn.Description, jsonCommand.ItemReturn.Quantity, jsonCommand.ItemReturn.Price, jsonCommand.ItemReturn.Vat, jsonCommand.ItemReturn.Dimension, jsonCommand.ItemReturn.CurrPercent, jsonCommand.ItemReturn.CurrAbsolute);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'ItemReturn' object.";
+                                }
+                                break;
+                            case "itemreturnex":
+                                if (jsonCommand.ItemReturnEx != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.ItemReturnEx(jsonCommand.ItemReturnEx.Description, jsonCommand.ItemReturnEx.Quantity, jsonCommand.ItemReturnEx.Price, jsonCommand.ItemReturnEx.Vat, jsonCommand.ItemReturnEx.Dimension, jsonCommand.ItemReturnEx.Group, jsonCommand.ItemReturnEx.CurrPercent, jsonCommand.ItemReturnEx.CurrAbsolute);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'ItemReturnEx' object.";
+                                }
+                                break;
+                            case "printdepositreceivevoid":
+                                if (jsonCommand.PrintDepositReceiveVoid != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.PrintDepositReceiveVoid(jsonCommand.PrintDepositReceiveVoid.Description, jsonCommand.PrintDepositReceiveVoid.Quantity, jsonCommand.PrintDepositReceiveVoid.Price);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'PrintDepositReceiveVoid' object.";
+                                }
+                                break;
+                            case "printcommentline":
+                                if (jsonCommand.PrintCommentLine != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.PrintCommentLine(jsonCommand.PrintCommentLine.CommentLine, jsonCommand.PrintCommentLine.CommentLineAttrib);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'PrintCommentLine' object.";
+                                }
+                                break;
+                            case "discountadditionforitem":
+                                if (jsonCommand.DiscountAdditionForItem != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.DiscountAdditionForItem(jsonCommand.DiscountAdditionForItem.Type, jsonCommand.DiscountAdditionForItem.Amount);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'DiscountAdditionForItem' object.";
+                                }
+                                break;
+                            case "discountadditionforreceipt":
+                                if (jsonCommand.DiscountAdditionForReceipt != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.DiscountAdditionForReceipt(jsonCommand.DiscountAdditionForReceipt.Type, jsonCommand.DiscountAdditionForReceipt.Amount);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'DiscountAdditionForReceipt' object.";
+                                }
+                                break;
+                            case "transferprereceipt":
+                                if (jsonCommand.TransferPreReceipt != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.TransferPreReceipt(jsonCommand.TransferPreReceipt.ReceiptNo, jsonCommand.TransferPreReceipt.Amount);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'TransferPreReceipt' object.";
+                                }
+                                break;
+                            case "endprereceipt":
+                                jsonResponse.ErrorCode = comManager.EndPreReceipt();
+                                break;
+                            case "linkprereceipt":
+                                if (jsonCommand.LinkPreReceipt != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.LinkPreReceipt(jsonCommand.LinkPreReceipt.ReceiptNo, jsonCommand.LinkPreReceipt.Amount);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'LinkPreReceipt' object.";
+                                }
+                                break;
+                            case "endfiscalreceiptcurr":
+                                if (jsonCommand.EndFiscalReceiptCurr != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.EndFiscalReceiptCurr(jsonCommand.EndFiscalReceiptCurr.rCash, jsonCommand.EndFiscalReceiptCurr.Credit1, jsonCommand.EndFiscalReceiptCurr.Credit2, jsonCommand.EndFiscalReceiptCurr.Credit3, jsonCommand.EndFiscalReceiptCurr.Credit4, jsonCommand.EndFiscalReceiptCurr.rCurrency1, jsonCommand.EndFiscalReceiptCurr.rCurrency2, jsonCommand.EndFiscalReceiptCurr.rCurrency3);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'EndFiscalReceiptCurr' object.";
+                                }
+                                break;
+                            case "setcustomercontact":
+                                if (jsonCommand.SetCustomerContact != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.SetCustomerContact(jsonCommand.SetCustomerContact.Contact);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'SetCustomerContact' object.";
+                                }
+                                break;
+                            case "refundreceiptinfo":
+                                if (jsonCommand.RefundReceiptInfo != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.RefundReceiptInfo(jsonCommand.RefundReceiptInfo.ECR, jsonCommand.RefundReceiptInfo.ReceiptNo, jsonCommand.RefundReceiptInfo.DocNo);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'RefundReceiptInfo' object.";
+                                }
+                                break;
+                            case "goodsreturncurr":
+                                if (jsonCommand.GoodsReturnCurr != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.GoodsReturnCurr(jsonCommand.GoodsReturnCurr.rCash, jsonCommand.GoodsReturnCurr.Credit1, jsonCommand.GoodsReturnCurr.Credit2, jsonCommand.GoodsReturnCurr.Credit3, jsonCommand.GoodsReturnCurr.Credit4, jsonCommand.GoodsReturnCurr.rCurrency1, jsonCommand.GoodsReturnCurr.rCurrency2, jsonCommand.GoodsReturnCurr.rCurrency3);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'GoodsReturnCurr' object.";
+                                }
+                                break;
+                            case "endfiscalreceiptex":
+                                if (jsonCommand.EndFiscalReceiptEx != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.EndFiscalReceiptEx(jsonCommand.EndFiscalReceiptEx.rCash, jsonCommand.EndFiscalReceiptEx.Credit1, jsonCommand.EndFiscalReceiptEx.Credit2, jsonCommand.EndFiscalReceiptEx.Credit3, jsonCommand.EndFiscalReceiptEx.Credit4, jsonCommand.EndFiscalReceiptEx.Credit5, jsonCommand.EndFiscalReceiptEx.Credit6, jsonCommand.EndFiscalReceiptEx.Credit7, jsonCommand.EndFiscalReceiptEx.Credit8);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'EndFiscalReceiptEx' object.";
+                                }
+                                break;
+                            case "goodsreturnex":
+                                if (jsonCommand.GoodsReturnEx != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.GoodsReturnEx(jsonCommand.GoodsReturnEx.rCash, jsonCommand.GoodsReturnEx.Credit1, jsonCommand.GoodsReturnEx.Credit2, jsonCommand.GoodsReturnEx.Credit3, jsonCommand.GoodsReturnEx.Credit4, jsonCommand.GoodsReturnEx.Credit5, jsonCommand.GoodsReturnEx.Credit6, jsonCommand.GoodsReturnEx.Credit7, jsonCommand.GoodsReturnEx.Credit8);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'GoodsReturnEx' object.";
+                                }
+                                break;
+                            case "endrecpaymentex":
+                                if (jsonCommand.EndRecPaymentEx != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.EndRecPaymentEx(jsonCommand.EndRecPaymentEx.rCash, jsonCommand.EndRecPaymentEx.Credit1, jsonCommand.EndRecPaymentEx.Credit2, jsonCommand.EndRecPaymentEx.Credit3, jsonCommand.EndRecPaymentEx.Credit4, jsonCommand.EndRecPaymentEx.Credit5, jsonCommand.EndRecPaymentEx.Credit6, jsonCommand.EndRecPaymentEx.Credit7, jsonCommand.EndRecPaymentEx.Credit8);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'EndRecPaymentEx' object.";
+                                }
+                                break;
+                            case "endfiscalcachereceipt":
+                                jsonResponse.ErrorCode = comManager.EndFiscalCacheReceipt();
+                                break;
+                            case "goodsreturncachereceipt":
+                                jsonResponse.ErrorCode = comManager.GoodsReturnCacheReceipt();
+                                break;
                             case "endrecpayment":
                                 if (jsonCommand.EndRecPayment != null)
                                 {
@@ -183,8 +557,19 @@ namespace empifisJsonAPI2
                     }
                     else
                     {
-                        jsonResponse.ErrorCode = receiptProcessor.ProcessReceipt(jsonReceipt);
-                        jsonResponse.ErrorMessage = jsonResponse.ErrorCode == 0 ? "Success" : "Error";
+                        {
+                            // CORRECTED LINE 1: Capture the tuple result (errorCode, message)
+                            var result = receiptProcessor.ProcessReceipt(jsonReceipt);
+
+                            // CORRECTED LINE 2: Assign the errorCode
+                            jsonResponse.ErrorCode = result.errorCode;
+
+                            // CORRECTED LINE 3: Assign the message (which contains the Fiscal Info or error detail)
+                            jsonResponse.ErrorMessage = result.message;
+                        }
+
+                        //jsonResponse.ErrorCode = receiptProcessor.ProcessReceipt(jsonReceipt);
+                        //jsonResponse.ErrorMessage = jsonResponse.ErrorCode == 0 ? "Success" : "Error";
                     }
                 }
                 catch (Exception ex)

@@ -112,8 +112,10 @@ namespace empifisJsonAPI2
                 }
                 else
                 {
-                    jsonResponse.ErrorCode = _receiptProcessor.ProcessReceipt(jsonReceipt);
-                    jsonResponse.ErrorMessage = jsonResponse.ErrorCode == 0 ? "Success" : "Error";
+                    // FIX: Capture the full tuple result (errorCode and message)
+                    var result = _receiptProcessor.ProcessReceipt(jsonReceipt);
+                    jsonResponse.ErrorCode = result.errorCode;
+                    jsonResponse.ErrorMessage = result.message;
                 }
             }
             catch (Exception ex)

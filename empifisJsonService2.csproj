@@ -7,6 +7,7 @@
     <UserSecretsId>dotnet-empifisJsonService2-9decb414-8651-4939-9863-c36178ee3a9b</UserSecretsId>
     <Platforms>AnyCPU;x86</Platforms>
     <EnableComHosting>true</EnableComHosting>
+	 <Version>1.0.3</Version>
   </PropertyGroup>
 
   <ItemGroup>
