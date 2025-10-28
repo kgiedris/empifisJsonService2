@@ -156,8 +156,46 @@ namespace empifisJsonAPI2
                     {
                         foreach (var line in item.CommentLines.Where(l => l != null && !string.IsNullOrEmpty(l.CommentLine)))
                         {
-                            errorCode = _comManager.PrintNonFiscalLine(line.CommentLine, line.CommentLineAttrib);
-                            _logger.Debug($"Called PrintNonFiscalLine with params ('{line.CommentLine}', {line.CommentLineAttrib}). Response: {errorCode}");
+                            errorCode = _comManager.PrintCommentLine(line.CommentLine, line.CommentLineAttrib);
+                            _logger.Debug($"Called PrintCommentLine with params ('{line.CommentLine}', {line.CommentLineAttrib}). Response: {errorCode}");
+                            if (errorCode != 0) return errorCode;
+                        }
+                    }
+                }
+            }
+
+            if (fiscalReceipt.PrintTareDeposit != null)
+            {
+                foreach (var item in fiscalReceipt.PrintTareDeposit.Where(i => i != null))
+                {
+                    errorCode = _comManager.PrintTareDeposit(item.Description, item.Quantity, item.UnitPrice);
+                    _logger.Debug($"Called PrintTareDeposit with params ('{item.Description}', {item.Quantity}, {item.UnitPrice}). Response: {errorCode}");
+                    if (errorCode != 0) return errorCode;
+                    if (item.CommentLines != null)
+                    {
+                        foreach (var line in item.CommentLines.Where(l => l != null && !string.IsNullOrEmpty(l.CommentLine)))
+                        {
+                            errorCode = _comManager.PrintCommentLine(line.CommentLine, line.CommentLineAttrib);
+                            _logger.Debug($"Called PrintCommentLine with params ('{line.CommentLine}', {line.CommentLineAttrib}). Response: {errorCode}");
+                            if (errorCode != 0) return errorCode;
+                        }
+                    }
+                }
+            }
+
+            if (fiscalReceipt.PrintTareDepositVoid != null)
+            {
+                foreach (var item in fiscalReceipt.PrintTareDepositVoid.Where(i => i != null))
+                {
+                    errorCode = _comManager.PrintTareDepositVoid(item.Description, item.Quantity, item.UnitPrice);
+                    _logger.Debug($"Called PrintTareDepositVoid with params ('{item.Description}', {item.Quantity}, {item.UnitPrice}). Response: {errorCode}");
+                    if (errorCode != 0) return errorCode;
+                    if (item.CommentLines != null)
+                    {
+                        foreach (var line in item.CommentLines.Where(l => l != null && !string.IsNullOrEmpty(l.CommentLine)))
+                        {
+                            errorCode = _comManager.PrintCommentLine(line.CommentLine, line.CommentLineAttrib);
+                            _logger.Debug($"Called PrintCommentLine with params ('{line.CommentLine}', {line.CommentLineAttrib}). Response: {errorCode}");
                             if (errorCode != 0) return errorCode;
                         }
                     }
@@ -274,6 +312,44 @@ namespace empifisJsonAPI2
                 {
                     errorCode = _comManager.PrintDepositReceive(item.DepositReceiveDesc, item.DepositReceiveQ, item.DepositReceivePrice);
                     _logger.Debug($"Called PrintDepositReceive with params ('{item.DepositReceiveDesc}', {item.DepositReceiveQ}, {item.DepositReceivePrice}). Response: {errorCode}");
+                    if (errorCode != 0) return errorCode;
+                    if (item.CommentLines != null)
+                    {
+                        foreach (var line in item.CommentLines.Where(l => l != null && !string.IsNullOrEmpty(l.CommentLine)))
+                        {
+                            errorCode = _comManager.PrintNonFiscalLine(line.CommentLine, line.CommentLineAttrib);
+                            _logger.Debug($"Called PrintNonFiscalLine with params ('{line.CommentLine}', {line.CommentLineAttrib}). Response: {errorCode}");
+                            if (errorCode != 0) return errorCode;
+                        }
+                    }
+                }
+            }
+
+            if (nonFiscalReceipt.PrintTareDeposit != null)
+            {
+                foreach (var item in nonFiscalReceipt.PrintTareDeposit.Where(i => i != null))
+                {
+                    errorCode = _comManager.PrintTareDeposit(item.Description, item.Quantity, item.UnitPrice);
+                    _logger.Debug($"Called PrintTareDeposit with params ('{item.Description}', {item.Quantity}, {item.UnitPrice}). Response: {errorCode}");
+                    if (errorCode != 0) return errorCode;
+                    if (item.CommentLines != null)
+                    {
+                        foreach (var line in item.CommentLines.Where(l => l != null && !string.IsNullOrEmpty(l.CommentLine)))
+                        {
+                            errorCode = _comManager.PrintNonFiscalLine(line.CommentLine, line.CommentLineAttrib);
+                            _logger.Debug($"Called PrintNonFiscalLine with params ('{line.CommentLine}', {line.CommentLineAttrib}). Response: {errorCode}");
+                            if (errorCode != 0) return errorCode;
+                        }
+                    }
+                }
+            }
+
+            if (nonFiscalReceipt.PrintTareDepositVoid != null)
+            {
+                foreach (var item in nonFiscalReceipt.PrintTareDepositVoid.Where(i => i != null))
+                {
+                    errorCode = _comManager.PrintTareDepositVoid(item.Description, item.Quantity, item.UnitPrice);
+                    _logger.Debug($"Called PrintTareDepositVoid with params ('{item.Description}', {item.Quantity}, {item.UnitPrice}). Response: {errorCode}");
                     if (errorCode != 0) return errorCode;
                     if (item.CommentLines != null)
                     {

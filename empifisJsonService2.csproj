@@ -1,36 +1,40 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
-
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+  <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>dotnet-empifisJsonService2-9decb414-8651-4939-9863-c36178ee3a9b</UserSecretsId>
-    <Platforms>AnyCPU;x86</Platforms>
+    <!-- Enable Windows Forms so NotifyIcon and System.Drawing.Icon are available when running the console app on Windows -->
+    <UseWindowsForms>true</UseWindowsForms>
+  <Platforms>AnyCPU;x86</Platforms>
+  <!-- Force 32-bit process so 32-bit COM servers can be loaded. -->
+  <PlatformTarget>x86</PlatformTarget>
+  <!-- Prefer32Bit is not supported for .NET 5+ (NETSDK1189); target the win-x86 RID instead. -->
+  <RuntimeIdentifier>win-x86</RuntimeIdentifier>
+  <!-- Allow building/publishing for other RIDs if needed -->
+  <RuntimeIdentifiers>win-x86;win-x64</RuntimeIdentifiers>
     <EnableComHosting>true</EnableComHosting>
-	 <Version>1.0.3</Version>
+  <Version>1.0.7</Version>
   </PropertyGroup>
-
   <ItemGroup>
     <Reference Include="Empirija">
         <HintPath>$(MSBuildProjectDirectory)\Interop.Empirija.dll</HintPath>
         <EmbedInteropTypes>true</EmbedInteropTypes>
     </Reference>
   </ItemGroup>
-
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="8.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.NewtonsoftJson" Version="8.0.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="NLog" Version="6.0.3" />
     <PackageReference Include="NLog.Extensions.Hosting" Version="6.0.3" />
     <PackageReference Include="NLog.Extensions.Logging" Version="6.0.3" />
     <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing" Version="9.0.8" />
   </ItemGroup>
-
   <ItemGroup>
     <Content Update="nlog.config">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
-
 </Project>

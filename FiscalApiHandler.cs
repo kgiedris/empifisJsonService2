@@ -20,7 +20,8 @@ namespace empifisJsonAPI2
             var config = app.Configuration.Get<AppConfig>();
             bool isRadisonErrorMode = config.servicePort.radison_error?.ToLower() == "on";
 
-            app.MapPost("/fiscalCommand", async (HttpContext context, EmpifisComManager comManager) =>
+            // Extract handler to register the same POST route for both /fiscalCommand and //fiscalCommand
+            var fiscalHandler = async (HttpContext context, EmpifisComManager comManager) =>
             {
                 var jsonResponse = new ResponseJson();
                 var reader = new StreamReader(context.Request.Body);
@@ -183,6 +184,28 @@ namespace empifisJsonAPI2
                                 {
                                     jsonResponse.ErrorCode = 999;
                                     jsonResponse.ErrorMessage = "Missing 'PrintTareItemVoid' object.";
+                                }
+                                break;
+                            case "printtaredeposit":
+                                if (jsonCommand.PrintTareDeposit != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.PrintTareDeposit(jsonCommand.PrintTareDeposit.Description, jsonCommand.PrintTareDeposit.Quantity, jsonCommand.PrintTareDeposit.UnitPrice);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'PrintTareDeposit' object.";
+                                }
+                                break;
+                            case "printtaredepositvoid":
+                                if (jsonCommand.PrintTareDepositVoid != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.PrintTareDepositVoid(jsonCommand.PrintTareDepositVoid.Description, jsonCommand.PrintTareDepositVoid.Quantity, jsonCommand.PrintTareDepositVoid.UnitPrice);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'PrintTareDepositVoid' object.";
                                 }
                                 break;
                             case "printdepositreceive":
@@ -536,9 +559,14 @@ namespace empifisJsonAPI2
                 _logger.Info($"Sending JSON response from /fiscalCommand:\n{responseJsonString}");
 
                 return Results.Ok(finalResponse);
-            });
+            };
 
-            app.MapPost("/fullReceipt", async (HttpContext context, ReceiptProcessor receiptProcessor) =>
+            // Register the handler for the canonical path. The middleware in Program.cs
+            // will normalize duplicate slashes (e.g. //fiscalCommand -> /fiscalCommand).
+            app.MapPost("/fiscalCommand", fiscalHandler);
+
+            // Extract the /fullReceipt handler so the fallback dispatcher can call it too
+            var fullReceiptHandler = async (HttpContext context, ReceiptProcessor receiptProcessor) =>
             {
                 var jsonResponse = new ResponseJson();
                 var reader = new StreamReader(context.Request.Body);
@@ -557,19 +585,9 @@ namespace empifisJsonAPI2
                     }
                     else
                     {
-                        {
-                            // CORRECTED LINE 1: Capture the tuple result (errorCode, message)
-                            var result = receiptProcessor.ProcessReceipt(jsonReceipt);
-
-                            // CORRECTED LINE 2: Assign the errorCode
-                            jsonResponse.ErrorCode = result.errorCode;
-
-                            // CORRECTED LINE 3: Assign the message (which contains the Fiscal Info or error detail)
-                            jsonResponse.ErrorMessage = result.message;
-                        }
-
-                        //jsonResponse.ErrorCode = receiptProcessor.ProcessReceipt(jsonReceipt);
-                        //jsonResponse.ErrorMessage = jsonResponse.ErrorCode == 0 ? "Success" : "Error";
+                        var result = receiptProcessor.ProcessReceipt(jsonReceipt);
+                        jsonResponse.ErrorCode = result.errorCode;
+                        jsonResponse.ErrorMessage = result.message;
                     }
                 }
                 catch (Exception ex)
@@ -618,6 +636,50 @@ namespace empifisJsonAPI2
                 _logger.Info($"Sending JSON response from /fullReceipt:\n{responseJsonString}");
 
                 return Results.Ok(finalResponse);
+            };
+
+            // Register canonical route
+            app.MapPost("/fullReceipt", fullReceiptHandler);
+
+            // Fallback catch-all: if a request wasn't matched (for example because the
+            // incoming raw target contained duplicate slashes) check the original raw
+            // target saved by middleware and dispatch to the fiscal handler when it
+            // contains a double-slash fiscalCommand. This allows requests like
+            // http://localhost:5006//fiscalCommand to be handled even if routing
+            // normalization prevented a direct match.
+            app.MapPost("/{**catchall}", async (HttpContext context, EmpifisComManager comManager, ReceiptProcessor receiptProcessor) =>
+            {
+                try
+                {
+                    var originalRaw = context.Items.ContainsKey("originalRawTarget") ? context.Items["originalRawTarget"]?.ToString() : null;
+
+                    if (string.IsNullOrEmpty(originalRaw))
+                    {
+                        return Results.NotFound();
+                    }
+
+                    // Strip query string and normalize consecutive slashes into one
+                    var pathPart = originalRaw;
+                    var qIdx = pathPart.IndexOf('?');
+                    if (qIdx >= 0) pathPart = pathPart.Substring(0, qIdx);
+                    var normalized = System.Text.RegularExpressions.Regex.Replace(pathPart, "/{2,}", "/");
+
+                    // Dispatch based on normalized path
+                    switch (normalized)
+                    {
+                        case "/fiscalCommand":
+                            return await fiscalHandler(context, comManager);
+                        case "/fullReceipt":
+                            return await fullReceiptHandler(context, receiptProcessor);
+                        default:
+                            return Results.NotFound();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, "Error in catch-all fallback route.");
+                    return Results.StatusCode(500);
+                }
             });
         }
     }

@@ -39,6 +39,8 @@ namespace empifisJsonAPI2.JsonObjects
         public CustomerDisplayPro CustomerDisplayPro { get; set; }
         public PrintTareItem PrintTareItem { get; set; }
         public PrintTareItemVoid PrintTareItemVoid { get; set; }
+        public PrintTareDeposit PrintTareDeposit { get; set; }
+        public PrintTareDepositVoid PrintTareDepositVoid { get; set; }
         public PrintDepositReceiveCredit PrintDepositReceiveCredit { get; set; }
         public PrintDepositReceiveVoid PrintDepositReceiveVoid { get; set; }
         public PrintDepositRefund PrintDepositRefund { get; set; }
@@ -74,6 +76,8 @@ namespace empifisJsonAPI2.JsonObjects
         public List<ReceiptItems> ReceiptItem { get; set; }
         public List<LinkPreReceipts> LinkPreReceipt { get; set; }
         public List<DepositReceive> DepositReceive { get; set; }
+        public List<PrintTareDeposit> PrintTareDeposit { get; set; }
+        public List<PrintTareDepositVoid> PrintTareDepositVoid { get; set; }
         public ReceiptPayment ReceiptPayment { get; set; }
         public ReceiptPaymentEx ReceiptPaymentEx { get; set; }
         public ReceiptDiscount ReceiptDiscount { get; set; }
@@ -84,6 +88,8 @@ namespace empifisJsonAPI2.JsonObjects
         {
             this.ReceiptItem = new List<ReceiptItems>();
             this.DepositReceive = new List<DepositReceive>();
+            this.PrintTareDeposit = new List<PrintTareDeposit>();
+            this.PrintTareDepositVoid = new List<PrintTareDepositVoid>();
             this.LinkPreReceipt = new List<LinkPreReceipts>();
         }
     }
@@ -183,6 +189,34 @@ namespace empifisJsonAPI2.JsonObjects
         public string Description { get; set; }
         public double Quantity { get; set; }
         public double Price { get; set; }
+    }
+
+    public class PrintTareDeposit
+    {
+        public string Description { get; set; }
+        public double Quantity { get; set; }
+        public double UnitPrice { get; set; }
+        public List<CommentLines> CommentLines { get; set; }
+
+        public PrintTareDeposit()
+        {
+            this.Description = string.Empty;
+            this.CommentLines = new List<CommentLines>();
+        }
+    }
+
+    public class PrintTareDepositVoid
+    {
+        public string Description { get; set; }
+        public double Quantity { get; set; }
+        public double UnitPrice { get; set; }
+        public List<CommentLines> CommentLines { get; set; }
+
+        public PrintTareDepositVoid()
+        {
+            this.Description = string.Empty;
+            this.CommentLines = new List<CommentLines>();
+        }
     }
 
     public class PrintDepositReceive
@@ -437,6 +471,8 @@ namespace empifisJsonAPI2.JsonObjects
     {
         public List<Tare> Tare { get; set; }
         public List<DepositReceive> DepositReceive { get; set; }
+        public List<PrintTareDeposit> PrintTareDeposit { get; set; }
+        public List<PrintTareDepositVoid> PrintTareDepositVoid { get; set; }
         public List<DepositReceiveCredit> DepositReceiveCredit { get; set; }
         public List<DepositRefund> DepositRefund { get; set; }
 
@@ -444,6 +480,8 @@ namespace empifisJsonAPI2.JsonObjects
         {
             this.Tare = new List<Tare>();
             this.DepositReceive = new List<DepositReceive>();
+            this.PrintTareDeposit = new List<PrintTareDeposit>();
+            this.PrintTareDepositVoid = new List<PrintTareDepositVoid>();
             this.DepositReceiveCredit = new List<DepositReceiveCredit>();
             this.DepositRefund = new List<DepositRefund>();
         }
