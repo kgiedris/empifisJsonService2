@@ -21,6 +21,7 @@ namespace empifisJsonAPI2.JsonObjects
         public EndRecPaymentEx EndRecPaymentEx { get; set; }
         public GetFiscalInfoParams GetFiscalInfo { get; set; }
         public PrintCopyOfReceipt PrintCopyOfReceipt { get; set; }
+        public GetCopyOfReceipt GetCopyOfReceipt { get; set; }
         public MoneyInCurr MoneyInCurr { get; set; }
         public MoneyOutCurr MoneyOutCurr { get; set; }
         public DiscountAdditionForItem DiscountAdditionForItem { get; set; }
@@ -46,6 +47,9 @@ namespace empifisJsonAPI2.JsonObjects
         public PrintDepositRefund PrintDepositRefund { get; set; }
         public PrintBarCode PrintBarCode { get; set; }
         public PrintNonFiscalLine PrintNonFiscalLine { get; set; }
+        public EndFiscalReceiptPayment EndFiscalReceiptPayment { get; set; }
+        public GoodsReturnPaymentExt GoodsReturnPayment { get; set; }
+        public EndCacheReceipt EndCacheReceipt { get; set; }
     }
 
     public class ReceiptJson
@@ -68,6 +72,7 @@ namespace empifisJsonAPI2.JsonObjects
             // The JSON deserializer will create these if present.
             this.TopCommentLines = new List<CommentLines>();
             this.BottomCommentLines = new List<CommentLines>();
+            // NonFiscalReceipt will be created when processing non-fiscal receipts if missing
         }
     }
 
@@ -145,6 +150,36 @@ namespace empifisJsonAPI2.JsonObjects
         public double Credit6 { get; set; }
         public double Credit7 { get; set; }
         public double Credit8 { get; set; }
+    }
+
+    public class EndFiscalReceiptPayment
+    {
+        public double Cash { get; set; }
+        public double Credit1 { get; set; }
+        public double Credit2 { get; set; }
+        public double Credit3 { get; set; }
+        public double Credit4 { get; set; }
+        public double Credit5 { get; set; }
+        public double Credit6 { get; set; }
+        public double Credit7 { get; set; }
+        public double Credit8 { get; set; }
+    }
+
+    public class GoodsReturnPaymentExt
+    {
+        public double Cash { get; set; }
+        public double Credit1 { get; set; }
+        public double Credit2 { get; set; }
+        public double Credit3 { get; set; }
+        public double Credit4 { get; set; }
+        public double Credit5 { get; set; }
+        public double Credit6 { get; set; }
+        public double Credit7 { get; set; }
+        public double Credit8 { get; set; }
+    }
+
+    public class EndCacheReceipt
+    {
     }
 
     public class ReceiptItems
@@ -327,6 +362,7 @@ namespace empifisJsonAPI2.JsonObjects
         public double Price { get; set; }
         public int Vat { get; set; }
         public string Dimension { get; set; }
+        public string Group { get; set; } = "GR";
         public double CurrPercent { get; set; }
         public double CurrAbsolute { get; set; }
     }
@@ -365,6 +401,10 @@ namespace empifisJsonAPI2.JsonObjects
         public double Credit2 { get; set; }
         public double Credit3 { get; set; }
         public double Credit4 { get; set; }
+        public double Credit5 { get; set; }
+        public double Credit6 { get; set; }
+        public double Credit7 { get; set; }
+        public double Credit8 { get; set; }
     }
 
     public class ReceiptPaymentEx
@@ -549,6 +589,12 @@ namespace empifisJsonAPI2.JsonObjects
     }
 
     public class PrintCopyOfReceipt
+    {
+        public int From { get; set; }
+        public int To { get; set; }
+    }
+
+    public class GetCopyOfReceipt
     {
         public int From { get; set; }
         public int To { get; set; }

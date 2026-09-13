@@ -4,6 +4,7 @@
     {
         public ServicePortConfig servicePort { get; set; }
         public JsonPathConfig JsonPathConfig { get; set; }
+        public CorsConfig Cors { get; set; }
     }
 
     public class ServicePortConfig
@@ -18,5 +19,10 @@
     {
         public string InFilePath { get; set; }
         public string OutFilePath { get; set; }
+    }
+
+    public class CorsConfig
+    {
+        public string AllowedOrigins { get; set; }
     }
 }

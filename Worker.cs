@@ -59,18 +59,31 @@ namespace empifisJsonAPI2
 
         private async Task FileMonitorLoop(CancellationToken stoppingToken)
         {
+            RecoverOrphanedProcessingFiles();
+
             while (!stoppingToken.IsCancellationRequested)
             {
                 try
                 {
                     if (Directory.Exists(_config.JsonPathConfig.InFilePath))
                     {
-                        var files = Directory.EnumerateFiles(_config.JsonPathConfig.InFilePath, "inReceipt*.json");
+                        var files = Directory.GetFiles(_config.JsonPathConfig.InFilePath, "inReceipt*.json");
 
                         foreach (var filePath in files)
                         {
+                            string processingPath = filePath + ".processing";
+                            try
+                            {
+                                File.Move(filePath, processingPath);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.Warn(ex, $"Could not lock file for processing, skipping: {filePath}");
+                                continue;
+                            }
+
                             _logger.Info($"Processing file: {filePath}");
-                            await ProcessFileAsync(filePath);
+                            await ProcessFileAsync(processingPath, filePath);
                         }
                     }
                     else
@@ -83,11 +96,40 @@ namespace empifisJsonAPI2
                     _logger.Error(ex, "An error occurred in the file monitor loop.");
                 }
 
-                await Task.Delay(10000, stoppingToken);
+                await Task.Delay(2000, stoppingToken);
             }
         }
 
-        private async Task ProcessFileAsync(string filePath)
+        // Requeues any "*.json.processing" files left behind by a previous run that crashed
+        // or was killed mid-processing, so they get picked up by the normal monitor loop
+        // instead of being silently lost forever (they no longer match the "inReceipt*.json" glob).
+        private void RecoverOrphanedProcessingFiles()
+        {
+            try
+            {
+                if (!Directory.Exists(_config.JsonPathConfig.InFilePath)) return;
+
+                foreach (var processingPath in Directory.GetFiles(_config.JsonPathConfig.InFilePath, "inReceipt*.json.processing"))
+                {
+                    var originalPath = processingPath.Substring(0, processingPath.Length - ".processing".Length);
+                    try
+                    {
+                        File.Move(processingPath, originalPath);
+                        _logger.Warn($"Recovered orphaned processing file from a previous run: {processingPath} -> {originalPath}");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error(ex, $"Failed to recover orphaned processing file: {processingPath}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "An error occurred while recovering orphaned processing files.");
+            }
+        }
+
+        private async Task ProcessFileAsync(string filePath, string originalFilePath)
         {
             string jsonContent;
             try
@@ -98,6 +140,16 @@ namespace empifisJsonAPI2
             catch (Exception ex)
             {
                 _logger.Error(ex, $"Failed to read file: {filePath}");
+
+                // Restore the original name so it gets retried on a later pass instead of being orphaned.
+                try
+                {
+                    File.Move(filePath, originalFilePath);
+                }
+                catch (Exception moveEx)
+                {
+                    _logger.Error(moveEx, $"Failed to restore file after read failure: {filePath}");
+                }
                 return;
             }
 
@@ -165,8 +217,8 @@ namespace empifisJsonAPI2
                 responseJsonString = JsonConvert.SerializeObject(jsonResponse, jsonSerializerSettings);
             }
 
-            _logger.Info($"Response for file '{Path.GetFileName(filePath)}':\n{responseJsonString}");
-            await WriteResponseFile(filePath, responseJsonString);
+            _logger.Info($"Response for file '{Path.GetFileName(originalFilePath)}':\n{responseJsonString}");
+            await WriteResponseFile(originalFilePath, responseJsonString);
 
             // Delete the original file
             try
@@ -198,7 +250,17 @@ namespace empifisJsonAPI2
                 }
 
                 string originalFileName = Path.GetFileName(originalFilePath);
-                string newFileName = originalFileName.Replace("inReceipt", "outReceipt");
+                string newFileName;
+
+                if (originalFileName.StartsWith("in", StringComparison.OrdinalIgnoreCase))
+                {
+                    newFileName = "out" + originalFileName.Substring(2);
+                }
+                else
+                {
+                    newFileName = originalFileName;
+                }
+
                 string newFilePath = Path.Combine(_config.JsonPathConfig.OutFilePath, newFileName);
 
                 await File.WriteAllTextAsync(newFilePath, responseJsonString);

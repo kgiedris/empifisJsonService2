@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <PropertyGroup>
+  <OutputType>WinExe</OutputType>
   <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -14,7 +15,7 @@
   <!-- Allow building/publishing for other RIDs if needed -->
   <RuntimeIdentifiers>win-x86;win-x64</RuntimeIdentifiers>
     <EnableComHosting>true</EnableComHosting>
-  <Version>1.0.7</Version>
+    <Version>2.1.7</Version>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Empirija">
@@ -35,6 +36,9 @@
   <ItemGroup>
     <Content Update="nlog.config">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="empirija-logo.png" Condition="Exists('empirija-logo.png')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
 </Project>

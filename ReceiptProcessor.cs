@@ -35,6 +35,11 @@ namespace empifisJsonAPI2
                         errorCode = ProcessFiscalReceipt(jsonReceipt.FiscalReceipt, jsonReceipt);
                         break;
                     case "nonfiscal":
+                        // If incoming JSON omitted NonFiscalReceipt, provide an empty default only for non-fiscal receipts
+                        if (jsonReceipt.NonFiscalReceipt == null)
+                        {
+                            jsonReceipt.NonFiscalReceipt = new NonFiscalReceipt();
+                        }
                         errorCode = ProcessNonFiscalReceipt(jsonReceipt.NonFiscalReceipt, jsonReceipt);
                         break;
                     case "return":
@@ -123,8 +128,8 @@ namespace empifisJsonAPI2
             {
                 foreach (var item in fiscalReceipt.ReceiptItem.Where(i => i != null))
                 {
-                    errorCode = _comManager.PrintRecItem(item.ItemDescription, item.ItemQuantity, item.ItemPrice, item.VatID, item.ItemUnit);
-                    _logger.Debug($"Called PrintRecItem with params ('{item.ItemDescription}', {item.ItemQuantity}, {item.ItemPrice}, {item.VatID}, '{item.ItemUnit}'). Response: {errorCode}");
+                    errorCode = _comManager.PrintRecItemEx(item.ItemDescription, item.ItemQuantity, item.ItemPrice, item.VatID, item.ItemUnit, item.ItemGroup);
+                    _logger.Debug($"Called PrintRecItemEx with params ('{item.ItemDescription}', {item.ItemQuantity}, {item.ItemPrice}, {item.VatID}, '{item.ItemUnit}', '{item.ItemGroup}'). Response: {errorCode}");
                     if (errorCode != 0) return errorCode;
 
                     if (item.ItemDiscount != null && item.ItemDiscount.ItemDiscountType != 999)
@@ -238,7 +243,7 @@ namespace empifisJsonAPI2
 
             bool isEndPreReceipt = jsonReceipt.FiscalReceipt?.EndPreReceipt?.EndPreReceiptLine == "EndPreReceipt";
             bool hasExtendedPayment = (jsonReceipt.FiscalReceipt?.ReceiptPaymentEx?.Cash + jsonReceipt.FiscalReceipt?.ReceiptPaymentEx?.Credit1 + jsonReceipt.FiscalReceipt?.ReceiptPaymentEx?.Credit2 + jsonReceipt.FiscalReceipt?.ReceiptPaymentEx?.Credit3 + jsonReceipt.FiscalReceipt?.ReceiptPaymentEx?.Credit4 + jsonReceipt.FiscalReceipt?.ReceiptPaymentEx?.Credit5 + jsonReceipt.FiscalReceipt?.ReceiptPaymentEx?.Credit6 + jsonReceipt.FiscalReceipt?.ReceiptPaymentEx?.Credit7 + jsonReceipt.FiscalReceipt?.ReceiptPaymentEx?.Credit8) > 0;
-            bool hasStandardPayment = (jsonReceipt.FiscalReceipt?.ReceiptPayment?.Cash + jsonReceipt.FiscalReceipt?.ReceiptPayment?.Credit1 + jsonReceipt.FiscalReceipt?.ReceiptPayment?.Credit2 + jsonReceipt.FiscalReceipt?.ReceiptPayment?.Credit3 + jsonReceipt.FiscalReceipt?.ReceiptPayment?.Credit4) > 0;
+            bool hasStandardPayment = (jsonReceipt.FiscalReceipt?.ReceiptPayment?.Cash + jsonReceipt.FiscalReceipt?.ReceiptPayment?.Credit1 + jsonReceipt.FiscalReceipt?.ReceiptPayment?.Credit2 + jsonReceipt.FiscalReceipt?.ReceiptPayment?.Credit3 + jsonReceipt.FiscalReceipt?.ReceiptPayment?.Credit4 + jsonReceipt.FiscalReceipt?.ReceiptPayment?.Credit5 + jsonReceipt.FiscalReceipt?.ReceiptPayment?.Credit6 + jsonReceipt.FiscalReceipt?.ReceiptPayment?.Credit7 + jsonReceipt.FiscalReceipt?.ReceiptPayment?.Credit8) > 0;
 
             if (isEndPreReceipt)
             {
@@ -255,10 +260,11 @@ namespace empifisJsonAPI2
             }
             else if (hasStandardPayment)
             {
-                errorCode = _comManager.EndFiscalReceiptCurr(
+                errorCode = _comManager.EndFiscalReceiptEx(
                     fiscalReceipt.ReceiptPayment.Cash, fiscalReceipt.ReceiptPayment.Credit1, fiscalReceipt.ReceiptPayment.Credit2,
-                    fiscalReceipt.ReceiptPayment.Credit3, fiscalReceipt.ReceiptPayment.Credit4, 0, 0, 0);
-                _logger.Debug($"Called EndFiscalReceiptCurr with params (standard payments). Response: {errorCode}");
+                    fiscalReceipt.ReceiptPayment.Credit3, fiscalReceipt.ReceiptPayment.Credit4, fiscalReceipt.ReceiptPayment.Credit5,
+                    fiscalReceipt.ReceiptPayment.Credit6, fiscalReceipt.ReceiptPayment.Credit7, fiscalReceipt.ReceiptPayment.Credit8);
+                _logger.Debug($"Called EndFiscalReceiptEx with params ({fiscalReceipt.ReceiptPayment.Cash}, {fiscalReceipt.ReceiptPayment.Credit1}, {fiscalReceipt.ReceiptPayment.Credit2}, {fiscalReceipt.ReceiptPayment.Credit3}, {fiscalReceipt.ReceiptPayment.Credit4}, {fiscalReceipt.ReceiptPayment.Credit5}, {fiscalReceipt.ReceiptPayment.Credit6}, {fiscalReceipt.ReceiptPayment.Credit7}, {fiscalReceipt.ReceiptPayment.Credit8}). Response: {errorCode}");
             }
             else
             {

@@ -29,10 +29,10 @@ namespace empifisJsonAPI2
 
                 _logger.Info($"Received JSON request to /fiscalCommand:\n{jsonString}");
 
-                var jsonCommand = JsonConvert.DeserializeObject<fiscalCommand>(jsonString);
-
                 try
                 {
+                    var jsonCommand = JsonConvert.DeserializeObject<fiscalCommand>(jsonString);
+
                     if (jsonCommand?.Command == null)
                     {
                         jsonResponse.ErrorCode = 999;
@@ -253,6 +253,8 @@ namespace empifisJsonAPI2
                                 }
                                 break;
                             case "printnonfisc_inline":
+                            case "printnonfiscalline":
+                            case "printnonfiscal":
                                 if (jsonCommand.PrintNonFiscalLine != null)
                                 {
                                     jsonResponse.ErrorCode = comManager.PrintNonFiscalLine(jsonCommand.PrintNonFiscalLine.Line, jsonCommand.PrintNonFiscalLine.Atrrib);
@@ -294,7 +296,7 @@ namespace empifisJsonAPI2
                             case "itemreturn":
                                 if (jsonCommand.ItemReturn != null)
                                 {
-                                    jsonResponse.ErrorCode = comManager.ItemReturn(jsonCommand.ItemReturn.Description, jsonCommand.ItemReturn.Quantity, jsonCommand.ItemReturn.Price, jsonCommand.ItemReturn.Vat, jsonCommand.ItemReturn.Dimension, jsonCommand.ItemReturn.CurrPercent, jsonCommand.ItemReturn.CurrAbsolute);
+                                    jsonResponse.ErrorCode = comManager.ItemReturnEx(jsonCommand.ItemReturn.Description, jsonCommand.ItemReturn.Quantity, jsonCommand.ItemReturn.Price, jsonCommand.ItemReturn.Vat, jsonCommand.ItemReturn.Dimension, jsonCommand.ItemReturn.Group, jsonCommand.ItemReturn.CurrPercent, jsonCommand.ItemReturn.CurrAbsolute);
                                 }
                                 else
                                 {
@@ -476,6 +478,31 @@ namespace empifisJsonAPI2
                                     jsonResponse.ErrorMessage = "Missing 'EndRecPayment' object.";
                                 }
                                 break;
+                            case "endfiscalreceiptpayment":
+                                if (jsonCommand.EndFiscalReceiptPayment != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.EndFiscalReceiptPayment(jsonCommand.EndFiscalReceiptPayment.Cash, jsonCommand.EndFiscalReceiptPayment.Credit1, jsonCommand.EndFiscalReceiptPayment.Credit2, jsonCommand.EndFiscalReceiptPayment.Credit3, jsonCommand.EndFiscalReceiptPayment.Credit4, jsonCommand.EndFiscalReceiptPayment.Credit5, jsonCommand.EndFiscalReceiptPayment.Credit6, jsonCommand.EndFiscalReceiptPayment.Credit7, jsonCommand.EndFiscalReceiptPayment.Credit8);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'EndFiscalReceiptPayment' object.";
+                                }
+                                break;
+                            case "goodsreturnpayment":
+                                if (jsonCommand.GoodsReturnPayment != null)
+                                {
+                                    jsonResponse.ErrorCode = comManager.GoodsReturnPayment(jsonCommand.GoodsReturnPayment.Cash, jsonCommand.GoodsReturnPayment.Credit1, jsonCommand.GoodsReturnPayment.Credit2, jsonCommand.GoodsReturnPayment.Credit3, jsonCommand.GoodsReturnPayment.Credit4, jsonCommand.GoodsReturnPayment.Credit5, jsonCommand.GoodsReturnPayment.Credit6, jsonCommand.GoodsReturnPayment.Credit7, jsonCommand.GoodsReturnPayment.Credit8);
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'GoodsReturnPayment' object.";
+                                }
+                                break;
+                            case "endcachereceipt":
+                                jsonResponse.ErrorCode = comManager.EndCacheReceipt();
+                                break;
                             case "printcopyoflastreceipt":
                                 jsonResponse.ErrorCode = comManager.PrintCopyOfLastReceipt();
                                 break;
@@ -488,6 +515,21 @@ namespace empifisJsonAPI2
                                 {
                                     jsonResponse.ErrorCode = 999;
                                     jsonResponse.ErrorMessage = "Missing 'PrintCopyOfReceipt' object.";
+                                }
+                                break;
+                            case "getcopyofreceipt":
+                                if (jsonCommand.GetCopyOfReceipt != null)
+                                {
+                                    var getCopyResult = comManager.GetCopyOfReceipt(jsonCommand.GetCopyOfReceipt.From, jsonCommand.GetCopyOfReceipt.To);
+                                    jsonResponse.ErrorCode = getCopyResult.errorCode;
+                                    jsonResponse.ErrorMessage = string.IsNullOrEmpty(getCopyResult.result)
+                                        ? string.Empty
+                                        : getCopyResult.result;
+                                }
+                                else
+                                {
+                                    jsonResponse.ErrorCode = 999;
+                                    jsonResponse.ErrorMessage = "Missing 'GetCopyOfReceipt' object.";
                                 }
                                 break;
                             case "setfooter":

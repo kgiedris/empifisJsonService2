@@ -3,6 +3,7 @@ using System.Threading;
 using Microsoft.Extensions.Hosting.WindowsServices;
 using NLog.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 using empifisJsonAPI2.JsonObjects;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Mvc;
@@ -17,25 +18,33 @@ using System;
 using System.Threading.Tasks;
 using System.IO;
 
+// Allocate console at startup to capture all logging, but keep it hidden
+ConsoleHelper.AllocateHiddenConsole();
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Configure logging
 builder.Logging.ClearProviders();
 builder.Logging.AddNLog();
 var logger = NLog.LogManager.GetCurrentClassLogger();
-// Log application version on startup
+
+// Get application version for logging and UI
+string appVersion = "unknown";
 try
 {
     var assembly = System.Reflection.Assembly.GetEntryAssembly() ?? System.Reflection.Assembly.GetExecutingAssembly();
     var version = assembly.GetName().Version?.ToString() ?? "unknown";
     var informational = assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false).FirstOrDefault() as System.Reflection.AssemblyInformationalVersionAttribute;
-    var infoVersion = informational?.InformationalVersion ?? version;
-    logger.Info($"Starting empifisJsonService2 version {infoVersion}");
+    var fullVersion = informational?.InformationalVersion ?? version;
+    // Strip metadata suffix (e.g., "2.0.2+e123456" -> "2.0.2")
+    appVersion = fullVersion.Split('+')[0];
+    logger.Info($"Starting empifisJsonService2 version {appVersion}");
 }
 catch (Exception ex)
 {
     logger.Warn(ex, "Failed to read application version.");
 }
+ConsoleHelper.AppVersion = appVersion;
 
 // Single-instance guard: ensure only one instance of this process runs at a time.
 // We keep the Mutex instance alive for the lifetime of the process to hold the lock.
@@ -70,7 +79,10 @@ var defaultSettings = new Dictionary<string, string?>
     ["servicePort:radison_error"] = "off",
     ["servicePort:com_timeout_seconds"] = "45",
     ["JsonPathConfig:InFilePath"] = "C:\\Altera\\json\\in\\",
-    ["JsonPathConfig:OutFilePath"] = "C:\\Altera\\json\\out\\"
+    ["JsonPathConfig:OutFilePath"] = "C:\\Altera\\json\\out\\",
+    // Empty = no cross-origin browser access by default; set to "*" or a comma-separated
+    // list of origins in config.json to allow specific web clients.
+    ["Cors:AllowedOrigins"] = ""
 };
 builder.Configuration.AddInMemoryCollection(defaultSettings);
 
@@ -141,6 +153,43 @@ var app = builder.Build();
 // Use custom JSON response middleware to normalize \uXXXX escaping
 app.UseMiddleware<CustomJsonResponseMiddleware>();
 
+// Add CORS middleware to handle preflight OPTIONS requests and add CORS headers.
+// Only requests carrying a browser "Origin" header are affected; server-to-server
+// callers (POS integrations, curl, etc.) don't send one and pass through untouched.
+// The configured origin list is resolved once via IOptionsMonitor (cheap, live-reload
+// aware) instead of re-binding the whole AppConfig via reflection on every request.
+var corsOptionsMonitor = app.Services.GetRequiredService<IOptionsMonitor<AppConfig>>();
+app.Use(async (context, next) =>
+{
+    var origin = context.Request.Headers.Origin.ToString();
+    if (!string.IsNullOrEmpty(origin))
+    {
+        var allowedOrigins = corsOptionsMonitor.CurrentValue.Cors?.AllowedOrigins ?? string.Empty;
+        var isWildcard = allowedOrigins.Trim() == "*";
+        var isAllowed = isWildcard || allowedOrigins
+            .Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(o => o.Trim())
+            .Any(o => string.Equals(o, origin, StringComparison.OrdinalIgnoreCase));
+
+        if (isAllowed)
+        {
+            context.Response.Headers["Access-Control-Allow-Origin"] = isWildcard ? "*" : origin;
+            context.Response.Headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS";
+            context.Response.Headers["Access-Control-Allow-Headers"] = "Content-Type";
+            context.Response.Headers["Access-Control-Max-Age"] = "3600";
+        }
+    }
+
+    // Handle preflight OPTIONS requests
+    if (context.Request.Method == "OPTIONS")
+    {
+        context.Response.StatusCode = 200;
+        await context.Response.CompleteAsync();
+        return;
+    }
+
+    await next();
+});
 
 
 // Middleware: normalize request paths by collapsing multiple consecutive slashes into a single slash.
@@ -241,34 +290,86 @@ if (Environment.UserInteractive)
         // Create NotifyIcon
         var notifyIcon = new NotifyIcon();
 
-        // Try to use the application's associated icon, fallback to system information icon
+        // Try to load custom icon from PNG file, then fallback to ICO or system icon
+        Icon? customIcon = null;
         try
         {
-            var asmPath = System.Reflection.Assembly.GetEntryAssembly()?.Location;
-            if (!string.IsNullOrEmpty(asmPath))
+            // Try to load PNG logo and convert to icon
+            var pngPath = Path.Combine(AppContext.BaseDirectory, "empirija-logo.png");
+            if (File.Exists(pngPath))
             {
-                notifyIcon.Icon = Icon.ExtractAssociatedIcon(asmPath);
+                using (var bmp = new Bitmap(pngPath))
+                using (var resized = new Bitmap(bmp, new Size(16, 16)))
+                {
+                    // Icon.FromHandle wraps the HICON without taking ownership of it, so the
+                    // handle must be freed explicitly (Icon.Dispose() won't do it). Clone into
+                    // a self-owned Icon first, then destroy the raw handle.
+                    var hIcon = resized.GetHicon();
+                    try
+                    {
+                        using (var tempIcon = Icon.FromHandle(hIcon))
+                        {
+                            customIcon = (Icon)tempIcon.Clone();
+                        }
+                    }
+                    finally
+                    {
+                        NativeMethods.DestroyIcon(hIcon);
+                    }
+                }
+            }
+            else
+            {
+                // Fallback to .ico file
+                var iconPath = Path.Combine(AppContext.BaseDirectory, "empirija.ico");
+                if (File.Exists(iconPath))
+                {
+                    customIcon = new Icon(iconPath);
+                }
             }
         }
-        catch { /* ignore, use default icon */ }
-
-        if (notifyIcon.Icon == null)
+        catch (Exception ex)
         {
-            notifyIcon.Icon = SystemIcons.Application;
+            logger.Warn($"Failed to load custom icon: {ex.Message}");
         }
 
-        notifyIcon.Text = "empifisJsonService2";
+        // Fallback to application icon or system icon
+        if (customIcon != null)
+        {
+            notifyIcon.Icon = customIcon;
+        }
+        else
+        {
+            try
+            {
+                var asmPath = System.Reflection.Assembly.GetEntryAssembly()?.Location;
+                if (!string.IsNullOrEmpty(asmPath))
+                {
+                    notifyIcon.Icon = Icon.ExtractAssociatedIcon(asmPath);
+                }
+            }
+            catch { /* ignore, use default icon */ }
 
-        // Context menu: Show Console / Exit
+            if (notifyIcon.Icon == null)
+            {
+                notifyIcon.Icon = SystemIcons.Application;
+            }
+        }
+
+        notifyIcon.Text = $"empifisJsonService2 v{appVersion}";
+        notifyIcon.Visible = true; // Ensure icon is always visible in main system tray
+
+        // Context menu: Show Console / Hide Console / Exit
         var menu = new ContextMenuStrip();
         var showItem = new ToolStripMenuItem("Show Console");
         showItem.Click += (s, e) =>
         {
-            if (hWnd != IntPtr.Zero)
-            {
-                NativeMethods.ShowWindow(hWnd, NativeMethods.SW_RESTORE);
-                NativeMethods.ShowWindow(hWnd, NativeMethods.SW_SHOW);
-            }
+            ConsoleHelper.ShowConsole();
+        };
+        var hideItem = new ToolStripMenuItem("Hide Console");
+        hideItem.Click += (s, e) =>
+        {
+            ConsoleHelper.HideConsole();
         };
         var exitItem = new ToolStripMenuItem("Exit");
         exitItem.Click += (s, e) =>
@@ -280,25 +381,20 @@ if (Environment.UserInteractive)
         };
 
         menu.Items.Add(showItem);
+        menu.Items.Add(hideItem);
+        menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(exitItem);
         notifyIcon.ContextMenuStrip = menu;
 
         notifyIcon.DoubleClick += (s, e) =>
         {
-            if (hWnd != IntPtr.Zero)
-            {
-                NativeMethods.ShowWindow(hWnd, NativeMethods.SW_RESTORE);
-                NativeMethods.ShowWindow(hWnd, NativeMethods.SW_SHOW);
-            }
+            ConsoleHelper.ShowConsole();
         };
 
         notifyIcon.Visible = true;
 
-        // Hide console window
-        if (hWnd != IntPtr.Zero)
-        {
-            NativeMethods.ShowWindow(hWnd, NativeMethods.SW_HIDE);
-        }
+        // Application runs as Windows application (WinExe) - no console window by default
+        // Use tray icon menu to show/hide console on demand
 
         // Ensure icon is disposed on exit
         AppDomain.CurrentDomain.ProcessExit += (s, e) =>
@@ -312,6 +408,16 @@ if (Environment.UserInteractive)
 
         // Start the Kestrel app in a background thread so we can run the Windows message pump
         var appTask = Task.Run(() => app.Run());
+
+        // If Kestrel fails to start (e.g. port already in use) or crashes later, the tray icon
+        // would otherwise keep running silently with no HTTP service and no visible indication
+        // anything is wrong. Surface it and shut the app down instead.
+        _ = appTask.ContinueWith(t =>
+        {
+            logger.Fatal(t.Exception, "Kestrel host terminated unexpectedly. Shutting down.");
+            NLog.LogManager.Flush(TimeSpan.FromSeconds(2));
+            try { Application.Exit(); } catch { }
+        }, TaskContinuationOptions.OnlyOnFaulted);
 
         // Run Windows Forms message loop to handle tray icon events (right-click, etc.)
         Application.Run();

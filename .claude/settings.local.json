@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet build:*)",
+      "Bash(xargs grep -l \"NativeMethods\")",
+      "Bash(powershell.exe -NoProfile -Command ' *)",
+      "Bash(dotnet build *)",
+      "Bash(git add *)"
+    ]
+  }
+}

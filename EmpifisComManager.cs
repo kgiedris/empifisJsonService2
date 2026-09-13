@@ -76,8 +76,19 @@ namespace empifisJsonAPI2
                 }
 
                 _logger.Warn($"COM method '{methodName}' timed out. Reloading object.");
-                ReloadComObject();
-                return 999;
+                var reloadSuccess = ReloadComObject();
+                // 555 = reload successful, 556 = reload unsuccessful
+                return reloadSuccess ? 555 : 556;
+            }
+            catch (Exception ex) when (IsMissingComMember(ex))
+            {
+                // The installed Interop.Empirija.dll does not expose this method at all (verified via
+                // reflection: EndFiscalReceiptPayment/GoodsReturnPayment/EndCacheReceipt/PrintTareDeposit(Void)
+                // are not present on IEmpiFisX in the currently checked-in interop assembly). This is a
+                // missing-interop-member problem, not a device fault, so don't reload the COM object for it.
+                _logger.Error($"COM method '{methodName}' is not implemented by the installed Interop.Empirija.dll. " +
+                    "The interop assembly needs to be regenerated from an updated Empirija type library before this command can work.");
+                return 998;
             }
             catch (COMException ex)
             {
@@ -91,6 +102,15 @@ namespace empifisJsonAPI2
                 ReloadComObject();
                 return 999;
             }
+        }
+
+        // Dynamic COM calls (used for methods absent from the compiled interop type) throw
+        // RuntimeBinderException when the COM object's IDispatch doesn't recognize the member name,
+        // wrapped in an AggregateException when it surfaces through Task.Wait().
+        private static bool IsMissingComMember(Exception ex)
+        {
+            var inner = ex is AggregateException agg ? agg.InnerException : ex;
+            return inner is Microsoft.CSharp.RuntimeBinder.RuntimeBinderException;
         }
 
     public int ResetFiscal() => ExecuteComMethod(() => _comObject?.ResetFiscal(), nameof(ResetFiscal));
@@ -156,8 +176,82 @@ namespace empifisJsonAPI2
     public int EndFiscalCacheReceipt() => ExecuteComMethod(() => _comObject?.EndFiscalCacheReceipt(), nameof(EndFiscalCacheReceipt));
     public int GoodsReturnCacheReceipt() => ExecuteComMethod(() => _comObject?.GoodsReturnCacheReceipt(), nameof(GoodsReturnCacheReceipt));
     public int EndRecPayment(double rCash, double credit1, double credit2, double credit3, double credit4, double rCurrency1, double rCurrency2, double rCurrency3) => ExecuteComMethod(() => _comObject?.EndRecPayment(rCash, credit1, credit2, credit3, credit4, rCurrency1, rCurrency2, rCurrency3), nameof(EndRecPayment));
+    public int EndFiscalReceiptPayment(double aCash, double aCredit1, double aCredit2, double aCredit3, double aCredit4, double aCredit5, double aCredit6, double aCredit7, double aCredit8)
+    {
+        return ExecuteComMethod(() =>
+        {
+            if (_comObject == null) return (int?)null;
+            dynamic comObj = _comObject;
+            return (int?)comObj.EndFiscalReceiptPayment(aCash, aCredit1, aCredit2, aCredit3, aCredit4, aCredit5, aCredit6, aCredit7, aCredit8);
+        }, nameof(EndFiscalReceiptPayment));
+    }
+    public int GoodsReturnPayment(double aCash, double aCredit1, double aCredit2, double aCredit3, double aCredit4, double aCredit5, double aCredit6, double aCredit7, double aCredit8)
+    {
+        return ExecuteComMethod(() =>
+        {
+            if (_comObject == null) return (int?)null;
+            dynamic comObj = _comObject;
+            return (int?)comObj.GoodsReturnPayment(aCash, aCredit1, aCredit2, aCredit3, aCredit4, aCredit5, aCredit6, aCredit7, aCredit8);
+        }, nameof(GoodsReturnPayment));
+    }
+    public int EndCacheReceipt()
+    {
+        return ExecuteComMethod(() =>
+        {
+            if (_comObject == null) return (int?)null;
+            dynamic comObj = _comObject;
+            return (int?)comObj.EndCacheReceipt();
+        }, nameof(EndCacheReceipt));
+    }
     public int PrintCopyOfLastReceipt() => ExecuteComMethod(() => _comObject?.PrintCopyOfLastReceipt(), nameof(PrintCopyOfLastReceipt));
     public int PrintCopyOfReceipt(int from, int to) => ExecuteComMethod(() => _comObject?.PrintCopyOfReceipt(from, to), nameof(PrintCopyOfReceipt));
+    public (int errorCode, string result) GetCopyOfReceipt(int from, int to)
+    {
+        string result = string.Empty;
+
+        if (_comObject == null)
+        {
+            _logger.Warn("COM object is not initialized for 'GetCopyOfReceipt'. Attempting to re-initialize.");
+            InitializeComObject();
+            if (_comObject == null)
+            {
+                return (999, "COM object could not be initialized.");
+            }
+        }
+
+        try
+        {
+            var task = Task.Run(() =>
+            {
+                if (_comObject == null) return (999, string.Empty);
+
+                string tempResult = string.Empty;
+                int tempCode = _comObject.GetCopyOfReceipt(from, to, ref tempResult);
+                return (tempCode, tempResult ?? string.Empty);
+            });
+
+            if (task.Wait(TimeSpan.FromSeconds(_comTimeoutSeconds)))
+            {
+                return task.Result;
+            }
+
+            _logger.Warn("COM method GetCopyOfReceipt timed out. Reloading object.");
+            var reloadSuccess = ReloadComObject();
+            return reloadSuccess ? (555, string.Empty) : (556, string.Empty);
+        }
+        catch (COMException ex)
+        {
+            _logger.Error(ex, "COMException occurred during GetCopyOfReceipt. Reloading object.");
+            ReloadComObject();
+            return (ex.ErrorCode, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "An unexpected error occurred during GetCopyOfReceipt. Reloading object.");
+            ReloadComObject();
+            return (999, ex.Message);
+        }
+    }
     public int SetFooter(string line1, string line2, string line3, string line4) => ExecuteComMethod(() => _comObject?.SetFooter(64, line1, 64, line2, 64, line3, 64, line4), nameof(SetFooter));
 
         public (int errorCode, string message) GetFiscalInfo(int infoType)
@@ -193,8 +287,10 @@ namespace empifisJsonAPI2
                 else
                 {
                     _logger.Warn("COM method GetFiscalInfo timed out. Reloading object.");
-                    ReloadComObject();
+                    var reloadSuccess = ReloadComObject();
                     message = "COM method call timed out.";
+                    // Return special codes when timeout triggers reload
+                    errorCode = reloadSuccess ? 555 : 556;
                 }
             }
             catch (COMException ex)
@@ -214,7 +310,7 @@ namespace empifisJsonAPI2
             return (errorCode, message);
         }
 
-        private void ReloadComObject()
+        private bool ReloadComObject()
         {
             lock (_reloadLock)
             {
@@ -242,11 +338,13 @@ namespace empifisJsonAPI2
                     {
                         _logger.Info("ReloadComObject: COM object loaded successfully.");
                     }
+                    return loaded;
                 }
                 catch (Exception ex)
                 {
                     _lastInitException = ex;
                     _logger.Error(ex, "Exception during Load() as part of ReloadComObject().");
+                    return false;
                 }
             }
         }
