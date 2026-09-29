@@ -64,8 +64,14 @@ Windows service that accepts receipts as JSON (HTTP on port 5006: `/fullReceipt`
 
 ## Plan / open items
 
-1. **Installer (Inno Setup 7, `C:\Program Files\Inno Setup 7`)** for a fresh PC: installs the service to `C:\Altera\EmpifisJsonAPI` and ReceiptTester to `C:\Altera\ReceiptTester`, creates `C:\Altera\Log` (and Archive) if missing, keeps an existing `config.json`, registers the service (same checks/settings as `install-and-update.bat`). The latest manual (`empifisJSON_*.docx`) goes into the service folder, `C:\Altera\EmpifisJsonAPI` (the Till publish output already contains it).
-2. **ReceiptTester review first** (`C:\ReceiptTester`, repo kgiedris/ReceiptTester, WPF, .NET 9, branch v0.3; a build is in `C:\Altera\ReceiptTester`): look for improvements, upgrade to .NET 10, decide self-contained or not for the installer.
+1. **Installer (Inno Setup 7, `C:\Program Files\Inno Setup 7`)** – next step. Requirements agreed with the user:
+   - Service (always) → `C:\Altera\EmpifisJsonAPI` from the Till publish output, including the latest manual (`empifisJSON_*.docx`) in the same folder.
+   - **ReceiptTester → `C:\Altera\ReceiptTester` as an optional component, unticked by default** (it can print Z reports / fiscal receipts on a customer's live till). Source: `publish/win-x86/ReceiptTester.exe` from the ReceiptTester repo.
+   - Create `C:\Altera\Log` and `C:\Altera\Log\Archive` if missing; give normal users write access to the log folder (ReceiptTester logs there too).
+   - Create the file mode folders from `config.json` (`JsonPathConfig.InFilePath` / `OutFilePath`, defaults `C:\Altera\json\in\`, `C:\Altera\json\out\`) if missing – read the paths from an existing config.json. (The service itself now also creates them at startup, 2.3.2+.)
+   - Keep an existing `config.json`; install a default one only if missing.
+   - **Must also update PCs where the service was just unzipped (no installer):** stop the running `empifisJsonAPI2Service` before copying, remove leftovers of older framework-dependent builds (`Interop.Empirija.dll`, `web.config`, `runtimes\`, old docx), recreate the service like `install-and-update.bat` (manual start, restart-on-failure, EmpiFisX 32-bit registration check with a clear message).
+2. ~~ReceiptTester review~~ **done 2026-09-29** (v0.4 on master and v0.3, commit 81cf8bc): .NET 10, single-file 32-bit exe, fixed non-fiscal deposit field names (the old ErrorCode 23), Log Repeater number parsing on Lithuanian Windows, `ItemUnit`, Stop between receipts, log location, Z-report confirmations, config port, ReloadEmpiFis button, 27 tests. Device finding: **Tare Deposit / Tare Deposit Void are rejected inside a non-fiscal receipt (ErrorCode 18, ERR_NONFIS_STATE)** – the manual still lists them under non-fiscal receipts; correct it once it's known whether they work in fiscal receipts (untested).
 3. Pilot 2.3.1 at the customer where EmpiFis got stuck; afterwards check `json2.log`/archives for "was slow", "timed out", "Ending the process", and the Windows Application log.
 4. Have the manual's tracked changes accepted in Word and the table of contents updated.
 5. Tell POS integrators: don't resend automatically on 555/556/557.

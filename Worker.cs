@@ -79,6 +79,19 @@ namespace empifisJsonAPI2
 
         private async Task FileMonitorLoop(CancellationToken stoppingToken)
         {
+            // Fresh install or changed paths in config.json: create the request/response folders.
+            foreach (var directory in new[] { _config.JsonPathConfig.InFilePath, _config.JsonPathConfig.OutFilePath })
+            {
+                try
+                {
+                    Directory.CreateDirectory(directory);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, $"Could not create the file mode folder '{directory}'.");
+                }
+            }
+
             await QuarantineOrphanedProcessingFilesAsync();
 
             while (!stoppingToken.IsCancellationRequested)

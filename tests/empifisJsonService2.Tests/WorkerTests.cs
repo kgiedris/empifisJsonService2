@@ -56,6 +56,15 @@ public sealed class WorkerTests : IDisposable
     }
 
     [Fact]
+    public async Task MissingFileModeFolders_AreCreated()
+    {
+        Directory.Delete(_in);
+        Directory.Delete(_out);
+
+        await RunUntil(() => Directory.Exists(_in) && Directory.Exists(_out));
+    }
+
+    [Fact]
     public async Task InterruptedRequest_IsQuarantinedAndAnswered557_NotResent()
     {
         File.WriteAllText(_in + "inReceipt_1.json.processing", """{ "receiptType": "report", "report": { "reportType": "printX" } }""");
