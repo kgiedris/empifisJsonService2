@@ -25,7 +25,6 @@ public static class ConsoleHelper
         private const int SW_RESTORE = 9;
         private const int SW_SHOW = 5;
 
-        private static bool _consoleRedirected = false;
         private static bool _consoleAllocated = false;
 
         /// <summary>
@@ -55,8 +54,6 @@ public static class ConsoleHelper
                 Console.SetOut(new StreamWriter(outStream) { AutoFlush = true });
                 Console.SetError(new StreamWriter(errStream) { AutoFlush = true });
                 Console.SetIn(new StreamReader(inStream));
-                
-                _consoleRedirected = true;
 
                 // Hide the console window immediately
                 var hWnd = GetConsoleWindow();

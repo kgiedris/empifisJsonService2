@@ -2,6 +2,10 @@
 using System.Collections.Generic;
 using System.Linq;
 
+// These are request/response shapes filled by the JSON deserializer; any property may be missing from
+// a request, so non-nullable warnings for them are noise.
+#nullable disable warnings
+
 namespace empifisJsonAPI2.JsonObjects
 {
     public class fiscalCommand
@@ -79,7 +83,7 @@ namespace empifisJsonAPI2.JsonObjects
     public class FiscalReceipt
     {
         public List<ReceiptItems> ReceiptItem { get; set; }
-        public List<LinkPreReceipts> LinkPreReceipt { get; set; }
+        public List<LinkPreReceipt> LinkPreReceipt { get; set; }
         public List<DepositReceive> DepositReceive { get; set; }
         public List<PrintTareDeposit> PrintTareDeposit { get; set; }
         public List<PrintTareDepositVoid> PrintTareDepositVoid { get; set; }
@@ -95,7 +99,7 @@ namespace empifisJsonAPI2.JsonObjects
             this.DepositReceive = new List<DepositReceive>();
             this.PrintTareDeposit = new List<PrintTareDeposit>();
             this.PrintTareDepositVoid = new List<PrintTareDepositVoid>();
-            this.LinkPreReceipt = new List<LinkPreReceipts>();
+            this.LinkPreReceipt = new List<LinkPreReceipt>();
         }
     }
 
@@ -137,9 +141,12 @@ namespace empifisJsonAPI2.JsonObjects
         public double Credit2 { get; set; }
         public double Credit3 { get; set; }
         public double Credit4 { get; set; }
+
+        public double Sum() => Cash + Credit1 + Credit2 + Credit3 + Credit4;
     }
 
-    public class GoodsReturnPaymentEx
+    /// <summary>Cash plus eight non-cash amounts (credit1 = bank card, 2 = gift coupon, 3 = transfer, ...).</summary>
+    public class PaymentAmounts
     {
         public double Cash { get; set; }
         public double Credit1 { get; set; }
@@ -150,33 +157,13 @@ namespace empifisJsonAPI2.JsonObjects
         public double Credit6 { get; set; }
         public double Credit7 { get; set; }
         public double Credit8 { get; set; }
+
+        public double Sum() => Cash + Credit1 + Credit2 + Credit3 + Credit4 + Credit5 + Credit6 + Credit7 + Credit8;
     }
 
-    public class EndFiscalReceiptPayment
-    {
-        public double Cash { get; set; }
-        public double Credit1 { get; set; }
-        public double Credit2 { get; set; }
-        public double Credit3 { get; set; }
-        public double Credit4 { get; set; }
-        public double Credit5 { get; set; }
-        public double Credit6 { get; set; }
-        public double Credit7 { get; set; }
-        public double Credit8 { get; set; }
-    }
-
-    public class GoodsReturnPaymentExt
-    {
-        public double Cash { get; set; }
-        public double Credit1 { get; set; }
-        public double Credit2 { get; set; }
-        public double Credit3 { get; set; }
-        public double Credit4 { get; set; }
-        public double Credit5 { get; set; }
-        public double Credit6 { get; set; }
-        public double Credit7 { get; set; }
-        public double Credit8 { get; set; }
-    }
+    public class GoodsReturnPaymentEx : PaymentAmounts { }
+    public class EndFiscalReceiptPayment : PaymentAmounts { }
+    public class GoodsReturnPaymentExt : PaymentAmounts { }
 
     public class EndCacheReceipt
     {
@@ -292,12 +279,6 @@ namespace empifisJsonAPI2.JsonObjects
         public double Amount { get; set; }
     }
 
-    public class LinkPreReceipts
-    {
-        public string ReceiptNo { get; set; }
-        public double Amount { get; set; }
-    }
-
     public class RefundReceiptInfo
     {
         public string ECR { get; set; }
@@ -396,33 +377,11 @@ namespace empifisJsonAPI2.JsonObjects
         public int CommentLineAttrib { get; set; }
     }
 
-    public class ReceiptPayment
-    {
-        public double Cash { get; set; }
-        public double Credit1 { get; set; }
-        public double Credit2 { get; set; }
-        public double Credit3 { get; set; }
-        public double Credit4 { get; set; }
-        public double Credit5 { get; set; }
-        public double Credit6 { get; set; }
-        public double Credit7 { get; set; }
-        public double Credit8 { get; set; }
-    }
+    public class ReceiptPayment : PaymentAmounts { }
+    public class ReceiptPaymentEx : PaymentAmounts { }
 
-    public class ReceiptPaymentEx
-    {
-        public double Cash { get; set; }
-        public double Credit1 { get; set; }
-        public double Credit2 { get; set; }
-        public double Credit3 { get; set; }
-        public double Credit4 { get; set; }
-        public double Credit5 { get; set; }
-        public double Credit6 { get; set; }
-        public double Credit7 { get; set; }
-        public double Credit8 { get; set; }
-    }
-
-    public class EndFiscalReceiptCurr
+    /// <summary>/fiscalCommand payment with cash (rCash), four non-cash amounts and three foreign currencies.</summary>
+    public class CurrencyPaymentAmounts
     {
         public double rCash { get; set; }
         public double Credit1 { get; set; }
@@ -434,31 +393,12 @@ namespace empifisJsonAPI2.JsonObjects
         public double rCurrency3 { get; set; }
     }
 
-    public class EndRecPayment
-    {
-        public double rCash { get; set; }
-        public double Credit1 { get; set; }
-        public double Credit2 { get; set; }
-        public double Credit3 { get; set; }
-        public double Credit4 { get; set; }
-        public double rCurrency1 { get; set; }
-        public double rCurrency2 { get; set; }
-        public double rCurrency3 { get; set; }
-    }
+    public class EndFiscalReceiptCurr : CurrencyPaymentAmounts { }
+    public class EndRecPayment : CurrencyPaymentAmounts { }
+    public class GoodsReturnCurr : CurrencyPaymentAmounts { }
 
-    public class GoodsReturnCurr
-    {
-        public double rCash { get; set; }
-        public double Credit1 { get; set; }
-        public double Credit2 { get; set; }
-        public double Credit3 { get; set; }
-        public double Credit4 { get; set; }
-        public double rCurrency1 { get; set; }
-        public double rCurrency2 { get; set; }
-        public double rCurrency3 { get; set; }
-    }
-
-    public class EndFiscalReceiptEx
+    /// <summary>/fiscalCommand payment with cash (rCash) and eight non-cash amounts.</summary>
+    public class RCashPaymentAmounts
     {
         public double rCash { get; set; }
         public double Credit1 { get; set; }
@@ -471,31 +411,9 @@ namespace empifisJsonAPI2.JsonObjects
         public double Credit8 { get; set; }
     }
 
-    public class GoodsReturnEx
-    {
-        public double rCash { get; set; }
-        public double Credit1 { get; set; }
-        public double Credit2 { get; set; }
-        public double Credit3 { get; set; }
-        public double Credit4 { get; set; }
-        public double Credit5 { get; set; }
-        public double Credit6 { get; set; }
-        public double Credit7 { get; set; }
-        public double Credit8 { get; set; }
-    }
-
-    public class EndRecPaymentEx
-    {
-        public double rCash { get; set; }
-        public double Credit1 { get; set; }
-        public double Credit2 { get; set; }
-        public double Credit3 { get; set; }
-        public double Credit4 { get; set; }
-        public double Credit5 { get; set; }
-        public double Credit6 { get; set; }
-        public double Credit7 { get; set; }
-        public double Credit8 { get; set; }
-    }
+    public class EndFiscalReceiptEx : RCashPaymentAmounts { }
+    public class GoodsReturnEx : RCashPaymentAmounts { }
+    public class EndRecPaymentEx : RCashPaymentAmounts { }
 
     public class ItemDiscount
     {
@@ -698,14 +616,6 @@ namespace empifisJsonAPI2.JsonObjects
             this.CashRegisterNo = string.Empty;
             this.ReceiptNo = string.Empty;
         }
-    }
-
-    public class Configuration
-    {
-        public string InFilePatch { get; set; }
-        public string InFileArchivePath { get; set; }
-        public string OutFilePath { get; set; }
-        public string OutFileArchivePath { get; set; }
     }
 
     public static class JsonInput

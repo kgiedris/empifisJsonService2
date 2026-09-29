@@ -1,4 +1,7 @@
-﻿namespace empifisJsonAPI2
+﻿// Bound from config.json by the configuration system; defaults are set in Program.cs.
+#nullable disable warnings
+
+namespace empifisJsonAPI2
 {
     public class AppConfig
     {

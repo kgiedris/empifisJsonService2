@@ -18,7 +18,7 @@ namespace empifisJsonAPI2
         public static void MapFiscalEndpoints(this WebApplication app)
         {
             var config = app.Configuration.Get<AppConfig>();
-            bool isRadisonErrorMode = config.servicePort.radison_error?.ToLower() == "on";
+            bool isRadisonErrorMode = config?.servicePort?.radison_error?.ToLower() == "on";
 
             // Extract handler to register the same POST route for both /fiscalCommand and //fiscalCommand
             var fiscalHandler = async (HttpContext context, EmpifisComManager comManager) =>

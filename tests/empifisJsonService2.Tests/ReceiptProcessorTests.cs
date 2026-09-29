@@ -143,6 +143,93 @@ public class ReceiptProcessorTests
     }
 
     [Fact]
+    public void FullFiscalReceipt_CallsEverySectionInOrder()
+    {
+        var device = new FakeFiscalDevice();
+        const string json = """
+            {
+              "receiptType": "fiscal",
+              "topCommentLines": [{ "commentLine": "Top", "commentLineAttrib": 64 }, { "commentLine": "" }],
+              "fiscalReceipt": {
+                "receiptItem": [{ "itemDescription": "Milk", "itemQuantity": 1, "itemPrice": 2.5, "vatID": 0,
+                                  "commentLines": [{ "commentLine": "Item note", "commentLineAttrib": 72 }] }],
+                "DepositReceive": [{ "depositReceiveDesc": "Bottle", "depositReceiveQ": 1, "depositReceivePrice": 0.1 }],
+                "PrintTareDeposit": [{ "Description": "Crate", "Quantity": 1, "UnitPrice": 3, "CommentLines": [{ "CommentLine": "Tare note" }] }],
+                "PrintTareDepositVoid": [{ "Description": "Crate", "Quantity": 1, "UnitPrice": 3 }],
+                "LinkPreReceipt": [{ "ReceiptNo": "145", "Amount": 1.5 }],
+                "receiptDiscount": { "receiptDiscountType": 2, "receiptDiscountAmount": -1 },
+                "receiptPayment": { "cash": 1, "credit1": 2 }
+              },
+              "SetFooter": { "line1": "F1", "line2": "F2", "line3": "F3", "line4": "F4" },
+              "bottomCommentLines": [{ "commentLine": "Bottom", "commentLineAttrib": 64 }]
+            }
+            """;
+
+        var (errorCode, _) = Process(device, json);
+
+        Assert.Equal(0, errorCode);
+        Assert.Equal(new[]
+        {
+            "GetFiscalInfo(2)", "BeginFiscalReceipt()", "PrintCommentLine(Top, 64)",
+            "PrintRecItemEx(Milk, 1, 2.5, 0, vnt, GR)", "PrintCommentLine(Item note, 72)",
+            "PrintDepositReceive(Bottle, 1, 0.1)",
+            "PrintTareDeposit(Crate, 1, 3)", "PrintCommentLine(Tare note, 64)",
+            "PrintTareDepositVoid(Crate, 1, 3)",
+            "LinkPreReceipt(145, 1.5)",
+            "DiscountAdditionForReceipt(2, -1)",
+            "PrintCommentLine(Bottom, 64)",
+            "SetFooter(F1, F2, F3, F4)",
+            "EndFiscalReceiptEx(1, 2, 0, 0, 0, 0, 0, 0, 0)",
+        }, device.Calls);
+    }
+
+    [Fact]
+    public void FiscalReceipt_EndPreReceipt_EndsAsPreReceipt()
+    {
+        var device = new FakeFiscalDevice();
+
+        Process(device, FiscalReceipt.Replace("\"receiptPaymentEx\": { \"cash\": 5 }", "\"EndPreReceipt\": { \"EndPreReceiptLine\": \"EndPreReceipt\" }"));
+
+        Assert.Equal("EndPreReceipt", device.CallNames[^1]);
+    }
+
+    [Fact]
+    public void ReturnReceipt_WithStandardPayment_EndsWithGoodsReturnCurr()
+    {
+        var device = new FakeFiscalDevice();
+        const string json = """
+            {
+              "receiptType": "return",
+              "returnReceipt": {
+                "receiptItem": [{ "itemDescription": "Milk", "itemQuantity": 1, "itemPrice": 9, "vatID": 0 }],
+                "receiptDiscount": { "receiptDiscountType": 1, "receiptDiscountAmount": -10 },
+                "goodsReturnPayment": { "cash": 4, "credit1": 4.1 }
+              }
+            }
+            """;
+
+        Process(device, json);
+
+        Assert.Contains("DiscountAdditionForReceipt(1, -10)", device.Calls);
+        Assert.Equal("GoodsReturnCurr(4, 4.1, 0, 0, 0, 0, 0, 0)", device.Calls[^1]);
+    }
+
+    [Theory]
+    [InlineData("""{ "receiptType": "report", "report": { "reportType": "sumPeriodic", "dateFrom": "20260901", "dateTo": "20260930" } }""", "PrintSumPeriodicReport(20260901, 20260930)")]
+    [InlineData("""{ "receiptType": "report", "report": { "reportType": "PeriodicByNumber", "noFrom": 1, "noTo": 2 } }""", "PrintPeriodicReportByNumber(1, 2)")]
+    [InlineData("""{ "receiptType": "special", "specialFunction": { "function": "moneyIn", "amount": "1" } }""", "MoneyInCurr(0, 1)")]
+    [InlineData("""{ "receiptType": "special", "specialFunction": { "function": "transferPreReceipt", "RecNo": "7", "Amount": 1.5 } }""", "TransferPreReceipt(7, 1.5)")]
+    public void ReportsAndSpecialFunctions_CallTheMatchingDeviceMethod(string json, string expectedCall)
+    {
+        var device = new FakeFiscalDevice();
+
+        var (errorCode, _) = Process(device, json);
+
+        Assert.Equal(0, errorCode);
+        Assert.Equal(new[] { expectedCall }, device.Calls);
+    }
+
+    [Fact]
     public void UnknownFields_AreIgnoredAndTheRestIsRead()
     {
         var receipt = JsonInput.Deserialize<ReceiptJson>(

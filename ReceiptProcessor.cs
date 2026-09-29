@@ -1,5 +1,6 @@
-﻿using NLog;
+using NLog;
 using empifisJsonAPI2.JsonObjects;
+using System.Collections.Generic;
 using System.Linq;
 using System;
 
@@ -34,17 +35,14 @@ namespace empifisJsonAPI2
 
             try
             {
-                switch (jsonReceipt.ReceiptType.ToLower())
+                switch (receiptType)
                 {
                     case "fiscal":
                         errorCode = ProcessFiscalReceipt(jsonReceipt.FiscalReceipt, jsonReceipt);
                         break;
                     case "nonfiscal":
                         // If incoming JSON omitted NonFiscalReceipt, provide an empty default only for non-fiscal receipts
-                        if (jsonReceipt.NonFiscalReceipt == null)
-                        {
-                            jsonReceipt.NonFiscalReceipt = new NonFiscalReceipt();
-                        }
+                        jsonReceipt.NonFiscalReceipt ??= new NonFiscalReceipt();
                         errorCode = ProcessNonFiscalReceipt(jsonReceipt.NonFiscalReceipt, jsonReceipt);
                         break;
                     case "return":
@@ -131,323 +129,56 @@ namespace empifisJsonAPI2
         {
             if (fiscalReceipt == null) return 999;
 
-            int errorCode = _comManager.BeginFiscalReceipt();
-            _logger.Debug($"Called BeginFiscalReceipt. Response: {errorCode}");
-            if (errorCode != 0) return errorCode;
+            int errorCode;
+            if ((errorCode = Logged(_comManager.BeginFiscalReceipt(), "BeginFiscalReceipt")) != 0) return errorCode;
+            if ((errorCode = PrintLines(jsonReceipt.TopCommentLines, nonFiscal: false)) != 0) return errorCode;
+            if ((errorCode = PrintItems(fiscalReceipt.ReceiptItem, PrintSaleItem, i => i.CommentLines, nonFiscal: false)) != 0) return errorCode;
+            if ((errorCode = PrintItems(fiscalReceipt.DepositReceive, PrintDepositReceive, i => i.CommentLines, nonFiscal: false)) != 0) return errorCode;
+            if ((errorCode = PrintItems(fiscalReceipt.PrintTareDeposit, PrintTareDeposit, i => i.CommentLines, nonFiscal: false)) != 0) return errorCode;
+            if ((errorCode = PrintItems(fiscalReceipt.PrintTareDepositVoid, PrintTareDepositVoid, i => i.CommentLines, nonFiscal: false)) != 0) return errorCode;
+            if ((errorCode = PrintItems(fiscalReceipt.LinkPreReceipt, link => Logged(_comManager.LinkPreReceipt(link.ReceiptNo, link.Amount),
+                $"LinkPreReceipt with params ('{link.ReceiptNo}', {link.Amount})"), _ => null, nonFiscal: false)) != 0) return errorCode;
+            if ((errorCode = ApplyReceiptDiscount(fiscalReceipt.ReceiptDiscount)) != 0) return errorCode;
+            if ((errorCode = PrintLines(jsonReceipt.BottomCommentLines, nonFiscal: false)) != 0) return errorCode;
+            if ((errorCode = SetFooter(jsonReceipt.SetFooter)) != 0) return errorCode;
 
-            if (jsonReceipt.TopCommentLines != null)
+            if (fiscalReceipt.EndPreReceipt?.EndPreReceiptLine == "EndPreReceipt")
             {
-                foreach (var line in jsonReceipt.TopCommentLines.Where(l => l != null && !string.IsNullOrEmpty(l.CommentLine)))
-                {
-                    errorCode = _comManager.PrintCommentLine(line.CommentLine, line.CommentLineAttrib);
-                    _logger.Debug($"Called PrintCommentLine with params ('{line.CommentLine}', {line.CommentLineAttrib}). Response: {errorCode}");
-                    if (errorCode != 0) return errorCode;
-                }
+                return Logged(_comManager.EndPreReceipt(), "EndPreReceipt");
             }
-
-            if (fiscalReceipt.ReceiptItem != null)
+            // An explicit payment with a zero total is treated like no payment (accepted behaviour).
+            PaymentAmounts? payment = (fiscalReceipt.ReceiptPaymentEx?.Sum() ?? 0) > 0 ? fiscalReceipt.ReceiptPaymentEx
+                : (fiscalReceipt.ReceiptPayment?.Sum() ?? 0) > 0 ? fiscalReceipt.ReceiptPayment
+                : null;
+            if (payment != null)
             {
-                foreach (var item in fiscalReceipt.ReceiptItem.Where(i => i != null))
-                {
-                    errorCode = _comManager.PrintRecItemEx(item.ItemDescription, item.ItemQuantity, item.ItemPrice, item.VatID, item.ItemUnit, item.ItemGroup);
-                    _logger.Debug($"Called PrintRecItemEx with params ('{item.ItemDescription}', {item.ItemQuantity}, {item.ItemPrice}, {item.VatID}, '{item.ItemUnit}', '{item.ItemGroup}'). Response: {errorCode}");
-                    if (errorCode != 0) return errorCode;
-
-                    if (item.ItemDiscount != null && item.ItemDiscount.ItemDiscountType != 999)
-                    {
-                        errorCode = _comManager.DiscountAdditionForItem(item.ItemDiscount.ItemDiscountType, item.ItemDiscount.ItemDiscountAmount);
-                        _logger.Debug($"Called DiscountAdditionForItem with params ({item.ItemDiscount.ItemDiscountType}, {item.ItemDiscount.ItemDiscountAmount}). Response: {errorCode}");
-                        if (errorCode != 0) return errorCode;
-                    }
-                    if (item.CommentLines != null)
-                    {
-                        foreach (var line in item.CommentLines.Where(l => l != null && !string.IsNullOrEmpty(l.CommentLine)))
-                        {
-                            errorCode = _comManager.PrintCommentLine(line.CommentLine, line.CommentLineAttrib);
-                            _logger.Debug($"Called PrintCommentLine with params ('{line.CommentLine}', {line.CommentLineAttrib}). Response: {errorCode}");
-                            if (errorCode != 0) return errorCode;
-                        }
-                    }
-                }
+                return Logged(_comManager.EndFiscalReceiptEx(payment.Cash, payment.Credit1, payment.Credit2, payment.Credit3,
+                    payment.Credit4, payment.Credit5, payment.Credit6, payment.Credit7, payment.Credit8),
+                    $"EndFiscalReceiptEx with params ({payment.Cash}, {payment.Credit1}, {payment.Credit2}, {payment.Credit3}, {payment.Credit4}, {payment.Credit5}, {payment.Credit6}, {payment.Credit7}, {payment.Credit8})");
             }
-
-            if (fiscalReceipt.DepositReceive != null)
-            {
-                foreach (var item in fiscalReceipt.DepositReceive.Where(i => i != null))
-                {
-                    errorCode = _comManager.PrintDepositReceive(item.DepositReceiveDesc, item.DepositReceiveQ, item.DepositReceivePrice);
-                    _logger.Debug($"Called PrintDepositReceive with params ('{item.DepositReceiveDesc}', {item.DepositReceiveQ}, {item.DepositReceivePrice}). Response: {errorCode}");
-                    if (errorCode != 0) return errorCode;
-                    if (item.CommentLines != null)
-                    {
-                        foreach (var line in item.CommentLines.Where(l => l != null && !string.IsNullOrEmpty(l.CommentLine)))
-                        {
-                            errorCode = _comManager.PrintCommentLine(line.CommentLine, line.CommentLineAttrib);
-                            _logger.Debug($"Called PrintCommentLine with params ('{line.CommentLine}', {line.CommentLineAttrib}). Response: {errorCode}");
-                            if (errorCode != 0) return errorCode;
-                        }
-                    }
-                }
-            }
-
-            if (fiscalReceipt.PrintTareDeposit != null)
-            {
-                foreach (var item in fiscalReceipt.PrintTareDeposit.Where(i => i != null))
-                {
-                    errorCode = _comManager.PrintTareDeposit(item.Description, item.Quantity, item.UnitPrice);
-                    _logger.Debug($"Called PrintTareDeposit with params ('{item.Description}', {item.Quantity}, {item.UnitPrice}). Response: {errorCode}");
-                    if (errorCode != 0) return errorCode;
-                    if (item.CommentLines != null)
-                    {
-                        foreach (var line in item.CommentLines.Where(l => l != null && !string.IsNullOrEmpty(l.CommentLine)))
-                        {
-                            errorCode = _comManager.PrintCommentLine(line.CommentLine, line.CommentLineAttrib);
-                            _logger.Debug($"Called PrintCommentLine with params ('{line.CommentLine}', {line.CommentLineAttrib}). Response: {errorCode}");
-                            if (errorCode != 0) return errorCode;
-                        }
-                    }
-                }
-            }
-
-            if (fiscalReceipt.PrintTareDepositVoid != null)
-            {
-                foreach (var item in fiscalReceipt.PrintTareDepositVoid.Where(i => i != null))
-                {
-                    errorCode = _comManager.PrintTareDepositVoid(item.Description, item.Quantity, item.UnitPrice);
-                    _logger.Debug($"Called PrintTareDepositVoid with params ('{item.Description}', {item.Quantity}, {item.UnitPrice}). Response: {errorCode}");
-                    if (errorCode != 0) return errorCode;
-                    if (item.CommentLines != null)
-                    {
-                        foreach (var line in item.CommentLines.Where(l => l != null && !string.IsNullOrEmpty(l.CommentLine)))
-                        {
-                            errorCode = _comManager.PrintCommentLine(line.CommentLine, line.CommentLineAttrib);
-                            _logger.Debug($"Called PrintCommentLine with params ('{line.CommentLine}', {line.CommentLineAttrib}). Response: {errorCode}");
-                            if (errorCode != 0) return errorCode;
-                        }
-                    }
-                }
-            }
-
-            if (fiscalReceipt.LinkPreReceipt != null)
-            {
-                foreach (var link in fiscalReceipt.LinkPreReceipt.Where(l => l != null))
-                {
-                    errorCode = _comManager.LinkPreReceipt(link.ReceiptNo, link.Amount);
-                    _logger.Debug($"Called LinkPreReceipt with params ('{link.ReceiptNo}', {link.Amount}). Response: {errorCode}");
-                    if (errorCode != 0) return errorCode;
-                }
-            }
-
-            if (fiscalReceipt.ReceiptDiscount != null && fiscalReceipt.ReceiptDiscount.ReceiptDiscountType != 999)
-            {
-                errorCode = _comManager.DiscountAdditionForReceipt(fiscalReceipt.ReceiptDiscount.ReceiptDiscountType, fiscalReceipt.ReceiptDiscount.ReceiptDiscountAmount);
-                _logger.Debug($"Called DiscountAdditionForReceipt with params ({fiscalReceipt.ReceiptDiscount.ReceiptDiscountType}, {fiscalReceipt.ReceiptDiscount.ReceiptDiscountAmount}). Response: {errorCode}");
-                if (errorCode != 0) return errorCode;
-            }
-
-            if (jsonReceipt.BottomCommentLines != null)
-            {
-                foreach (var line in jsonReceipt.BottomCommentLines.Where(l => l != null && !string.IsNullOrEmpty(l.CommentLine)))
-                {
-                    errorCode = _comManager.PrintCommentLine(line.CommentLine, line.CommentLineAttrib);
-                    _logger.Debug($"Called PrintCommentLine with params ('{line.CommentLine}', {line.CommentLineAttrib}). Response: {errorCode}");
-                    if (errorCode != 0) return errorCode;
-                }
-            }
-
-            if (jsonReceipt.SetFooter != null)
-            {
-                errorCode = _comManager.SetFooter(jsonReceipt.SetFooter.line1, jsonReceipt.SetFooter.line2, jsonReceipt.SetFooter.line3, jsonReceipt.SetFooter.line4);
-                _logger.Debug($"Called SetFooter with params ('{jsonReceipt.SetFooter.line1}', etc). Response: {errorCode}");
-                if (errorCode != 0) return errorCode;
-            }
-
-            bool isEndPreReceipt = jsonReceipt.FiscalReceipt?.EndPreReceipt?.EndPreReceiptLine == "EndPreReceipt";
-            bool hasExtendedPayment = (jsonReceipt.FiscalReceipt?.ReceiptPaymentEx?.Cash + jsonReceipt.FiscalReceipt?.ReceiptPaymentEx?.Credit1 + jsonReceipt.FiscalReceipt?.ReceiptPaymentEx?.Credit2 + jsonReceipt.FiscalReceipt?.ReceiptPaymentEx?.Credit3 + jsonReceipt.FiscalReceipt?.ReceiptPaymentEx?.Credit4 + jsonReceipt.FiscalReceipt?.ReceiptPaymentEx?.Credit5 + jsonReceipt.FiscalReceipt?.ReceiptPaymentEx?.Credit6 + jsonReceipt.FiscalReceipt?.ReceiptPaymentEx?.Credit7 + jsonReceipt.FiscalReceipt?.ReceiptPaymentEx?.Credit8) > 0;
-            bool hasStandardPayment = (jsonReceipt.FiscalReceipt?.ReceiptPayment?.Cash + jsonReceipt.FiscalReceipt?.ReceiptPayment?.Credit1 + jsonReceipt.FiscalReceipt?.ReceiptPayment?.Credit2 + jsonReceipt.FiscalReceipt?.ReceiptPayment?.Credit3 + jsonReceipt.FiscalReceipt?.ReceiptPayment?.Credit4 + jsonReceipt.FiscalReceipt?.ReceiptPayment?.Credit5 + jsonReceipt.FiscalReceipt?.ReceiptPayment?.Credit6 + jsonReceipt.FiscalReceipt?.ReceiptPayment?.Credit7 + jsonReceipt.FiscalReceipt?.ReceiptPayment?.Credit8) > 0;
-
-            if (isEndPreReceipt)
-            {
-                errorCode = _comManager.EndPreReceipt();
-                _logger.Debug($"Called EndPreReceipt. Response: {errorCode}");
-            }
-            else if (hasExtendedPayment)
-            {
-                errorCode = _comManager.EndFiscalReceiptEx(
-                    fiscalReceipt.ReceiptPaymentEx.Cash, fiscalReceipt.ReceiptPaymentEx.Credit1, fiscalReceipt.ReceiptPaymentEx.Credit2,
-                    fiscalReceipt.ReceiptPaymentEx.Credit3, fiscalReceipt.ReceiptPaymentEx.Credit4, fiscalReceipt.ReceiptPaymentEx.Credit5,
-                    fiscalReceipt.ReceiptPaymentEx.Credit6, fiscalReceipt.ReceiptPaymentEx.Credit7, fiscalReceipt.ReceiptPaymentEx.Credit8);
-                _logger.Debug($"Called EndFiscalReceiptEx with params (extended payments). Response: {errorCode}");
-            }
-            else if (hasStandardPayment)
-            {
-                errorCode = _comManager.EndFiscalReceiptEx(
-                    fiscalReceipt.ReceiptPayment.Cash, fiscalReceipt.ReceiptPayment.Credit1, fiscalReceipt.ReceiptPayment.Credit2,
-                    fiscalReceipt.ReceiptPayment.Credit3, fiscalReceipt.ReceiptPayment.Credit4, fiscalReceipt.ReceiptPayment.Credit5,
-                    fiscalReceipt.ReceiptPayment.Credit6, fiscalReceipt.ReceiptPayment.Credit7, fiscalReceipt.ReceiptPayment.Credit8);
-                _logger.Debug($"Called EndFiscalReceiptEx with params ({fiscalReceipt.ReceiptPayment.Cash}, {fiscalReceipt.ReceiptPayment.Credit1}, {fiscalReceipt.ReceiptPayment.Credit2}, {fiscalReceipt.ReceiptPayment.Credit3}, {fiscalReceipt.ReceiptPayment.Credit4}, {fiscalReceipt.ReceiptPayment.Credit5}, {fiscalReceipt.ReceiptPayment.Credit6}, {fiscalReceipt.ReceiptPayment.Credit7}, {fiscalReceipt.ReceiptPayment.Credit8}). Response: {errorCode}");
-            }
-            else
-            {
-                errorCode = _comManager.EndFiscalCacheReceipt();
-                _logger.Debug($"No payment specified. Called EndFiscalCacheReceipt. Response: {errorCode}");
-            }
-
-            return errorCode;
+            return Logged(_comManager.EndFiscalCacheReceipt(), "EndFiscalCacheReceipt (no payment specified)");
         }
 
         private int ProcessNonFiscalReceipt(NonFiscalReceipt nonFiscalReceipt, ReceiptJson jsonReceipt)
         {
             if (nonFiscalReceipt == null) return 999;
 
-            int errorCode = _comManager.BeginNonFiscalReceipt();
-            _logger.Debug($"Called BeginNonFiscalReceipt. Response: {errorCode}");
-            if (errorCode != 0) return errorCode;
+            int errorCode;
+            if ((errorCode = Logged(_comManager.BeginNonFiscalReceipt(), "BeginNonFiscalReceipt")) != 0) return errorCode;
+            if ((errorCode = PrintLines(jsonReceipt.TopCommentLines, nonFiscal: true)) != 0) return errorCode;
+            if ((errorCode = PrintItems(nonFiscalReceipt.Tare, item => Logged(_comManager.PrintTareItem(item.TareDescription, item.TareQuantity, item.TarePrice),
+                $"PrintTareItem with params ('{item.TareDescription}', {item.TareQuantity}, {item.TarePrice})"), i => i.CommentLines, nonFiscal: true)) != 0) return errorCode;
+            if ((errorCode = PrintItems(nonFiscalReceipt.DepositReceive, PrintDepositReceive, i => i.CommentLines, nonFiscal: true)) != 0) return errorCode;
+            if ((errorCode = PrintItems(nonFiscalReceipt.PrintTareDeposit, PrintTareDeposit, i => i.CommentLines, nonFiscal: true)) != 0) return errorCode;
+            if ((errorCode = PrintItems(nonFiscalReceipt.PrintTareDepositVoid, PrintTareDepositVoid, i => i.CommentLines, nonFiscal: true)) != 0) return errorCode;
+            if ((errorCode = PrintItems(nonFiscalReceipt.DepositReceiveCredit, item => Logged(_comManager.PrintDepositReceiveCredit(item.depositReceiveCreditDesc, item.DepositReceiveCreditQ, item.DepositReceiveCreditPrice),
+                $"PrintDepositReceiveCredit with params ('{item.depositReceiveCreditDesc}', {item.DepositReceiveCreditQ}, {item.DepositReceiveCreditPrice})"), i => i.CommentLines, nonFiscal: true)) != 0) return errorCode;
+            if ((errorCode = PrintItems(nonFiscalReceipt.DepositRefund, item => Logged(_comManager.PrintDepositRefund(item.DepositRefundDescription, item.DepositRefundQuantity, item.DepositRefundPrice),
+                $"PrintDepositRefund with params ('{item.DepositRefundDescription}', {item.DepositRefundQuantity}, {item.DepositRefundPrice})"), i => i.CommentLines, nonFiscal: true)) != 0) return errorCode;
+            if ((errorCode = PrintLines(jsonReceipt.BottomCommentLines, nonFiscal: true)) != 0) return errorCode;
+            if ((errorCode = SetFooter(jsonReceipt.SetFooter)) != 0) return errorCode;
 
-            if (jsonReceipt.TopCommentLines != null)
-            {
-                foreach (var line in jsonReceipt.TopCommentLines.Where(l => l != null && !string.IsNullOrEmpty(l.CommentLine)))
-                {
-                    errorCode = _comManager.PrintNonFiscalLine(line.CommentLine, line.CommentLineAttrib);
-                    _logger.Debug($"Called PrintNonFiscalLine with params ('{line.CommentLine}', {line.CommentLineAttrib}). Response: {errorCode}");
-                    if (errorCode != 0) return errorCode;
-                }
-            }
-
-            if (nonFiscalReceipt.Tare != null)
-            {
-                foreach (var item in nonFiscalReceipt.Tare.Where(i => i != null))
-                {
-                    errorCode = _comManager.PrintTareItem(item.TareDescription, item.TareQuantity, item.TarePrice);
-                    _logger.Debug($"Called PrintTareItem with params ('{item.TareDescription}', {item.TareQuantity}, {item.TarePrice}). Response: {errorCode}");
-                    if (errorCode != 0) return errorCode;
-                    if (item.CommentLines != null)
-                    {
-                        foreach (var line in item.CommentLines.Where(l => l != null && !string.IsNullOrEmpty(l.CommentLine)))
-                        {
-                            errorCode = _comManager.PrintNonFiscalLine(line.CommentLine, line.CommentLineAttrib);
-                            _logger.Debug($"Called PrintNonFiscalLine with params ('{line.CommentLine}', {line.CommentLineAttrib}). Response: {errorCode}");
-                            if (errorCode != 0) return errorCode;
-                        }
-                    }
-                }
-            }
-
-            if (nonFiscalReceipt.DepositReceive != null)
-            {
-                foreach (var item in nonFiscalReceipt.DepositReceive.Where(i => i != null))
-                {
-                    errorCode = _comManager.PrintDepositReceive(item.DepositReceiveDesc, item.DepositReceiveQ, item.DepositReceivePrice);
-                    _logger.Debug($"Called PrintDepositReceive with params ('{item.DepositReceiveDesc}', {item.DepositReceiveQ}, {item.DepositReceivePrice}). Response: {errorCode}");
-                    if (errorCode != 0) return errorCode;
-                    if (item.CommentLines != null)
-                    {
-                        foreach (var line in item.CommentLines.Where(l => l != null && !string.IsNullOrEmpty(l.CommentLine)))
-                        {
-                            errorCode = _comManager.PrintNonFiscalLine(line.CommentLine, line.CommentLineAttrib);
-                            _logger.Debug($"Called PrintNonFiscalLine with params ('{line.CommentLine}', {line.CommentLineAttrib}). Response: {errorCode}");
-                            if (errorCode != 0) return errorCode;
-                        }
-                    }
-                }
-            }
-
-            if (nonFiscalReceipt.PrintTareDeposit != null)
-            {
-                foreach (var item in nonFiscalReceipt.PrintTareDeposit.Where(i => i != null))
-                {
-                    errorCode = _comManager.PrintTareDeposit(item.Description, item.Quantity, item.UnitPrice);
-                    _logger.Debug($"Called PrintTareDeposit with params ('{item.Description}', {item.Quantity}, {item.UnitPrice}). Response: {errorCode}");
-                    if (errorCode != 0) return errorCode;
-                    if (item.CommentLines != null)
-                    {
-                        foreach (var line in item.CommentLines.Where(l => l != null && !string.IsNullOrEmpty(l.CommentLine)))
-                        {
-                            errorCode = _comManager.PrintNonFiscalLine(line.CommentLine, line.CommentLineAttrib);
-                            _logger.Debug($"Called PrintNonFiscalLine with params ('{line.CommentLine}', {line.CommentLineAttrib}). Response: {errorCode}");
-                            if (errorCode != 0) return errorCode;
-                        }
-                    }
-                }
-            }
-
-            if (nonFiscalReceipt.PrintTareDepositVoid != null)
-            {
-                foreach (var item in nonFiscalReceipt.PrintTareDepositVoid.Where(i => i != null))
-                {
-                    errorCode = _comManager.PrintTareDepositVoid(item.Description, item.Quantity, item.UnitPrice);
-                    _logger.Debug($"Called PrintTareDepositVoid with params ('{item.Description}', {item.Quantity}, {item.UnitPrice}). Response: {errorCode}");
-                    if (errorCode != 0) return errorCode;
-                    if (item.CommentLines != null)
-                    {
-                        foreach (var line in item.CommentLines.Where(l => l != null && !string.IsNullOrEmpty(l.CommentLine)))
-                        {
-                            errorCode = _comManager.PrintNonFiscalLine(line.CommentLine, line.CommentLineAttrib);
-                            _logger.Debug($"Called PrintNonFiscalLine with params ('{line.CommentLine}', {line.CommentLineAttrib}). Response: {errorCode}");
-                            if (errorCode != 0) return errorCode;
-                        }
-                    }
-                }
-            }
-
-            if (nonFiscalReceipt.DepositReceiveCredit != null)
-            {
-                foreach (var item in nonFiscalReceipt.DepositReceiveCredit.Where(i => i != null))
-                {
-                    errorCode = _comManager.PrintDepositReceiveCredit(item.depositReceiveCreditDesc, item.DepositReceiveCreditQ, item.DepositReceiveCreditPrice);
-                    _logger.Debug($"Called PrintDepositReceiveCredit with params ('{item.depositReceiveCreditDesc}', {item.DepositReceiveCreditQ}, {item.DepositReceiveCreditPrice}). Response: {errorCode}");
-                    if (errorCode != 0) return errorCode;
-                    if (item.CommentLines != null)
-                    {
-                        foreach (var line in item.CommentLines.Where(l => l != null && !string.IsNullOrEmpty(l.CommentLine)))
-                        {
-                            errorCode = _comManager.PrintNonFiscalLine(line.CommentLine, line.CommentLineAttrib);
-                            _logger.Debug($"Called PrintNonFiscalLine with params ('{line.CommentLine}', {line.CommentLineAttrib}). Response: {errorCode}");
-                            if (errorCode != 0) return errorCode;
-                        }
-                    }
-                }
-            }
-
-            if (nonFiscalReceipt.DepositRefund != null)
-            {
-                foreach (var item in nonFiscalReceipt.DepositRefund.Where(i => i != null))
-                {
-                    errorCode = _comManager.PrintDepositRefund(item.DepositRefundDescription, item.DepositRefundQuantity, item.DepositRefundPrice);
-                    _logger.Debug($"Called PrintDepositRefund with params ('{item.DepositRefundDescription}', {item.DepositRefundQuantity}, {item.DepositRefundPrice}). Response: {errorCode}");
-                    if (errorCode != 0) return errorCode;
-                    if (item.CommentLines != null)
-                    {
-                        foreach (var line in item.CommentLines.Where(l => l != null && !string.IsNullOrEmpty(l.CommentLine)))
-                        {
-                            errorCode = _comManager.PrintNonFiscalLine(line.CommentLine, line.CommentLineAttrib);
-                            _logger.Debug($"Called PrintNonFiscalLine with params ('{line.CommentLine}', {line.CommentLineAttrib}). Response: {errorCode}");
-                            if (errorCode != 0) return errorCode;
-                        }
-                    }
-                }
-            }
-
-            if (jsonReceipt.BottomCommentLines != null)
-            {
-                foreach (var line in jsonReceipt.BottomCommentLines.Where(l => l != null && !string.IsNullOrEmpty(l.CommentLine)))
-                {
-                    errorCode = _comManager.PrintNonFiscalLine(line.CommentLine, line.CommentLineAttrib);
-                    _logger.Debug($"Called PrintNonFiscalLine with params ('{line.CommentLine}', {line.CommentLineAttrib}). Response: {errorCode}");
-                    if (errorCode != 0) return errorCode;
-                }
-            }
-
-            if (jsonReceipt.SetFooter != null)
-            {
-                errorCode = _comManager.SetFooter(jsonReceipt.SetFooter.line1, jsonReceipt.SetFooter.line2, jsonReceipt.SetFooter.line3, jsonReceipt.SetFooter.line4);
-                _logger.Debug($"Called SetFooter with params ('{jsonReceipt.SetFooter.line1}', etc). Response: {errorCode}");
-                if (errorCode != 0) return errorCode;
-            }
-
-            errorCode = _comManager.EndNonFiscalReceipt();
-            _logger.Debug($"Called EndNonFiscalReceipt. Response: {errorCode}");
-            return errorCode;
+            return Logged(_comManager.EndNonFiscalReceipt(), "EndNonFiscalReceipt");
         }
 
         private int ProcessReturnReceipt(ReturnReceipt returnReceipt, ReceiptJson jsonReceipt)
@@ -458,59 +189,12 @@ namespace empifisJsonAPI2
                 return 999;
             }
 
-            int errorCode = _comManager.BeginFiscalReceipt();
-            _logger.Debug($"Called BeginFiscalReceipt. Response: {errorCode}");
-            if (errorCode != 0) return errorCode;
-
-            if (jsonReceipt.TopCommentLines != null)
-            {
-                foreach (var line in jsonReceipt.TopCommentLines.Where(l => l != null && !string.IsNullOrEmpty(l.CommentLine)))
-                {
-                    errorCode = _comManager.PrintCommentLine(line.CommentLine, line.CommentLineAttrib);
-                    _logger.Debug($"Called PrintCommentLine with params ('{line.CommentLine}', {line.CommentLineAttrib}). Response: {errorCode}");
-                    if (errorCode != 0) return errorCode;
-                }
-            }
-
-            foreach (var item in returnReceipt.ReceiptItem.Where(i => i != null))
-            {
-                errorCode = _comManager.PrintRecItemEx(item.ItemDescription, item.ItemQuantity, item.ItemPrice, item.VatID, item.ItemUnit, item.ItemGroup);
-                _logger.Debug($"Called PrintRecItemEx with params ('{item.ItemDescription}', {item.ItemQuantity}, {item.ItemPrice}, {item.VatID}, '{item.ItemUnit}', '{item.ItemGroup}'). Response: {errorCode}");
-                if (errorCode != 0) return errorCode;
-
-                if (item.ItemDiscount != null && item.ItemDiscount.ItemDiscountType != 999)
-                {
-                    errorCode = _comManager.DiscountAdditionForItem(item.ItemDiscount.ItemDiscountType, item.ItemDiscount.ItemDiscountAmount);
-                    _logger.Debug($"Called DiscountAdditionForItem with params ({item.ItemDiscount.ItemDiscountType}, {item.ItemDiscount.ItemDiscountAmount}). Response: {errorCode}");
-                    if (errorCode != 0) return errorCode;
-                }
-                if (item.CommentLines != null)
-                {
-                    foreach (var line in item.CommentLines.Where(l => l != null && !string.IsNullOrEmpty(l.CommentLine)))
-                    {
-                        errorCode = _comManager.PrintCommentLine(line.CommentLine, line.CommentLineAttrib);
-                        _logger.Debug($"Called PrintCommentLine with params ('{line.CommentLine}', {line.CommentLineAttrib}). Response: {errorCode}");
-                        if (errorCode != 0) return errorCode;
-                    }
-                }
-            }
-
-            if (returnReceipt.ReceiptDiscount != null && returnReceipt.ReceiptDiscount.ReceiptDiscountType != 999)
-            {
-                errorCode = _comManager.DiscountAdditionForReceipt(returnReceipt.ReceiptDiscount.ReceiptDiscountType, returnReceipt.ReceiptDiscount.ReceiptDiscountAmount);
-                _logger.Debug($"Called DiscountAdditionForReceipt with params ({returnReceipt.ReceiptDiscount.ReceiptDiscountType}, {returnReceipt.ReceiptDiscount.ReceiptDiscountAmount}). Response: {errorCode}");
-                if (errorCode != 0) return errorCode;
-            }
-
-            if (jsonReceipt.BottomCommentLines != null)
-            {
-                foreach (var line in jsonReceipt.BottomCommentLines.Where(l => l != null && !string.IsNullOrEmpty(l.CommentLine)))
-                {
-                    errorCode = _comManager.PrintCommentLine(line.CommentLine, line.CommentLineAttrib);
-                    _logger.Debug($"Called PrintCommentLine with params ('{line.CommentLine}', {line.CommentLineAttrib}). Response: {errorCode}");
-                    if (errorCode != 0) return errorCode;
-                }
-            }
+            int errorCode;
+            if ((errorCode = Logged(_comManager.BeginFiscalReceipt(), "BeginFiscalReceipt")) != 0) return errorCode;
+            if ((errorCode = PrintLines(jsonReceipt.TopCommentLines, nonFiscal: false)) != 0) return errorCode;
+            if ((errorCode = PrintItems(returnReceipt.ReceiptItem, PrintSaleItem, i => i.CommentLines, nonFiscal: false)) != 0) return errorCode;
+            if ((errorCode = ApplyReceiptDiscount(returnReceipt.ReceiptDiscount)) != 0) return errorCode;
+            if ((errorCode = PrintLines(jsonReceipt.BottomCommentLines, nonFiscal: false)) != 0) return errorCode;
 
             // The manual names this object RefundReceiptInfo in the example and ReturnReceiptInfo in the
             // table; accept either, but send it to the device only once.
@@ -519,82 +203,46 @@ namespace empifisJsonAPI2
                 _logger.Warn("Both RefundReceiptInfo and ReturnReceiptInfo were given; using RefundReceiptInfo.");
             }
             RefundReceiptInfo? refundInfo = returnReceipt.RefundReceiptInfo ?? returnReceipt.ReturnReceiptInfo;
-            if (refundInfo != null)
-            {
-                errorCode = _comManager.RefundReceiptInfo(refundInfo.ECR, refundInfo.ReceiptNo, refundInfo.DocumentNumber);
-                _logger.Debug($"Called RefundReceiptInfo with params ('{refundInfo.ECR}', '{refundInfo.ReceiptNo}', '{refundInfo.DocumentNumber}'). Response: {errorCode}");
-                if (errorCode != 0) return errorCode;
-            }
+            if (refundInfo != null && (errorCode = Logged(_comManager.RefundReceiptInfo(refundInfo.ECR, refundInfo.ReceiptNo, refundInfo.DocumentNumber),
+                $"RefundReceiptInfo with params ('{refundInfo.ECR}', '{refundInfo.ReceiptNo}', '{refundInfo.DocumentNumber}')")) != 0) return errorCode;
 
-            if (jsonReceipt.SetFooter != null)
-            {
-                errorCode = _comManager.SetFooter(jsonReceipt.SetFooter.line1, jsonReceipt.SetFooter.line2, jsonReceipt.SetFooter.line3, jsonReceipt.SetFooter.line4);
-                _logger.Debug($"Called SetFooter with params ('{jsonReceipt.SetFooter.line1}', etc). Response: {errorCode}");
-                if (errorCode != 0) return errorCode;
-            }
+            if ((errorCode = SetFooter(jsonReceipt.SetFooter)) != 0) return errorCode;
 
-            bool hasExtendedReturnPayment = (returnReceipt.GoodsReturnPaymentEx?.Cash + returnReceipt.GoodsReturnPaymentEx?.Credit1 + returnReceipt.GoodsReturnPaymentEx?.Credit2 + returnReceipt.GoodsReturnPaymentEx?.Credit3 + returnReceipt.GoodsReturnPaymentEx?.Credit4 + returnReceipt.GoodsReturnPaymentEx?.Credit5 + returnReceipt.GoodsReturnPaymentEx?.Credit6 + returnReceipt.GoodsReturnPaymentEx?.Credit7 + returnReceipt.GoodsReturnPaymentEx?.Credit8) > 0;
-            bool hasStandardReturnPayment = (returnReceipt.GoodsReturnPayment?.Cash + returnReceipt.GoodsReturnPayment?.Credit1 + returnReceipt.GoodsReturnPayment?.Credit2 + returnReceipt.GoodsReturnPayment?.Credit3 + returnReceipt.GoodsReturnPayment?.Credit4) > 0;
-
-            if (hasExtendedReturnPayment)
+            if ((returnReceipt.GoodsReturnPaymentEx?.Sum() ?? 0) > 0)
             {
-                errorCode = _comManager.GoodsReturnEx(
-                    returnReceipt.GoodsReturnPaymentEx.Cash, returnReceipt.GoodsReturnPaymentEx.Credit1, returnReceipt.GoodsReturnPaymentEx.Credit2,
-                    returnReceipt.GoodsReturnPaymentEx.Credit3, returnReceipt.GoodsReturnPaymentEx.Credit4, returnReceipt.GoodsReturnPaymentEx.Credit5,
-                    returnReceipt.GoodsReturnPaymentEx.Credit6, returnReceipt.GoodsReturnPaymentEx.Credit7, returnReceipt.GoodsReturnPaymentEx.Credit8);
-                _logger.Debug($"Called GoodsReturnEx with params (extended payments). Response: {errorCode}");
+                var p = returnReceipt.GoodsReturnPaymentEx!;
+                return Logged(_comManager.GoodsReturnEx(p.Cash, p.Credit1, p.Credit2, p.Credit3, p.Credit4, p.Credit5, p.Credit6, p.Credit7, p.Credit8),
+                    $"GoodsReturnEx with params ({p.Cash}, {p.Credit1}, {p.Credit2}, {p.Credit3}, {p.Credit4}, {p.Credit5}, {p.Credit6}, {p.Credit7}, {p.Credit8})");
             }
-            else if (hasStandardReturnPayment)
+            if ((returnReceipt.GoodsReturnPayment?.Sum() ?? 0) > 0)
             {
-                errorCode = _comManager.GoodsReturnCurr(
-                    returnReceipt.GoodsReturnPayment.Cash, returnReceipt.GoodsReturnPayment.Credit1, returnReceipt.GoodsReturnPayment.Credit2,
-                    returnReceipt.GoodsReturnPayment.Credit3, returnReceipt.GoodsReturnPayment.Credit4, 0, 0, 0);
-                _logger.Debug($"Called GoodsReturnCurr with params (standard payments). Response: {errorCode}");
+                var p = returnReceipt.GoodsReturnPayment!;
+                return Logged(_comManager.GoodsReturnCurr(p.Cash, p.Credit1, p.Credit2, p.Credit3, p.Credit4, 0, 0, 0),
+                    $"GoodsReturnCurr with params ({p.Cash}, {p.Credit1}, {p.Credit2}, {p.Credit3}, {p.Credit4}, 0, 0, 0)");
             }
-            else
-            {
-                errorCode = _comManager.GoodsReturnCacheReceipt();
-                _logger.Debug($"No payment specified. Called GoodsReturnCacheReceipt. Response: {errorCode}");
-            }
-
-            return errorCode;
+            return Logged(_comManager.GoodsReturnCacheReceipt(), "GoodsReturnCacheReceipt (no payment specified)");
         }
 
         private int ProcessReport(Report report)
         {
             if (report == null || string.IsNullOrEmpty(report.ReportType)) return 999;
 
-            int errorCode;
             switch (report.ReportType.ToLower())
             {
                 case "minix":
-                    errorCode = _comManager.PrintMiniXReport();
-                    _logger.Debug($"Called PrintMiniXReport. Response: {errorCode}");
-                    return errorCode;
+                    return Logged(_comManager.PrintMiniXReport(), "PrintMiniXReport");
                 case "printx":
-                    errorCode = _comManager.PrintXReport();
-                    _logger.Debug($"Called PrintXReport. Response: {errorCode}");
-                    return errorCode;
+                    return Logged(_comManager.PrintXReport(), "PrintXReport");
                 case "printz":
-                    errorCode = _comManager.PrintZReport();
-                    _logger.Debug($"Called PrintZReport. Response: {errorCode}");
-                    return errorCode;
+                    return Logged(_comManager.PrintZReport(), "PrintZReport");
                 case "sumperiodic":
-                    errorCode = _comManager.PrintSumPeriodicReport(report.DateFrom, report.DateTo);
-                    _logger.Debug($"Called PrintSumPeriodicReport with params ('{report.DateFrom}', '{report.DateTo}'). Response: {errorCode}");
-                    return errorCode;
+                    return Logged(_comManager.PrintSumPeriodicReport(report.DateFrom, report.DateTo), $"PrintSumPeriodicReport with params ('{report.DateFrom}', '{report.DateTo}')");
                 case "periodic":
-                    errorCode = _comManager.PrintPeriodicReport(report.DateFrom, report.DateTo);
-                    _logger.Debug($"Called PrintPeriodicReport with params ('{report.DateFrom}', '{report.DateTo}'). Response: {errorCode}");
-                    return errorCode;
+                    return Logged(_comManager.PrintPeriodicReport(report.DateFrom, report.DateTo), $"PrintPeriodicReport with params ('{report.DateFrom}', '{report.DateTo}')");
                 case "sumperiodicbynumber":
-                    errorCode = _comManager.PrintSumPeriodicReportByNumber(report.NoFrom, report.NoTo);
-                    _logger.Debug($"Called PrintSumPeriodicReportByNumber with params ({report.NoFrom}, {report.NoTo}). Response: {errorCode}");
-                    return errorCode;
+                    return Logged(_comManager.PrintSumPeriodicReportByNumber(report.NoFrom, report.NoTo), $"PrintSumPeriodicReportByNumber with params ({report.NoFrom}, {report.NoTo})");
                 case "periodicbynumber":
-                    errorCode = _comManager.PrintPeriodicReportByNumber(report.NoFrom, report.NoTo);
-                    _logger.Debug($"Called PrintPeriodicReportByNumber with params ({report.NoFrom}, {report.NoTo}). Response: {errorCode}");
-                    return errorCode;
+                    return Logged(_comManager.PrintPeriodicReportByNumber(report.NoFrom, report.NoTo), $"PrintPeriodicReportByNumber with params ({report.NoFrom}, {report.NoTo})");
                 default:
                     _logger.Warn($"Invalid reportType: {report.ReportType}");
                     return 999;
@@ -605,31 +253,90 @@ namespace empifisJsonAPI2
         {
             if (specialFunction == null || string.IsNullOrEmpty(specialFunction.Function)) return 999;
 
-            int errorCode;
             switch (specialFunction.Function.ToLower())
             {
                 case "moneyin":
                 case "moneyincurr":
-                    errorCode = _comManager.MoneyInCurr(0, specialFunction.Amount);
-                    _logger.Debug($"Called MoneyInCurr with params ({0}, {specialFunction.Amount}). Response: {errorCode}");
-                    return errorCode;
+                    return Logged(_comManager.MoneyInCurr(0, specialFunction.Amount), $"MoneyInCurr with params (0, {specialFunction.Amount})");
                 case "moneyout":
                 case "moneyoutcurr":
-                    errorCode = _comManager.MoneyOutCurr(0, specialFunction.Amount);
-                    _logger.Debug($"Called MoneyOutCurr with params ({0}, {specialFunction.Amount}). Response: {errorCode}");
-                    return errorCode;
+                    return Logged(_comManager.MoneyOutCurr(0, specialFunction.Amount), $"MoneyOutCurr with params (0, {specialFunction.Amount})");
                 case "transferprereceipt":
-                    errorCode = _comManager.TransferPreReceipt(specialFunction.RecNo, specialFunction.Amount);
-                    _logger.Debug($"Called TransferPreReceipt with params ('{specialFunction.RecNo}', {specialFunction.Amount}). Response: {errorCode}");
-                    return errorCode;
+                    return Logged(_comManager.TransferPreReceipt(specialFunction.RecNo, specialFunction.Amount), $"TransferPreReceipt with params ('{specialFunction.RecNo}', {specialFunction.Amount})");
                 case "opencashdrawer":
-                    errorCode = _comManager.OpenCashDrawer();
-                    _logger.Debug($"Called OpenCashDrawer. Response: {errorCode}");
-                    return errorCode;
+                    return Logged(_comManager.OpenCashDrawer(), "OpenCashDrawer");
                 default:
                     _logger.Warn($"Invalid special function: {specialFunction.Function}");
                     return 999;
             }
+        }
+
+        // Logs a device call with its result and returns the result.
+        private int Logged(int errorCode, string call)
+        {
+            _logger.Debug($"Called {call}. Response: {errorCode}");
+            return errorCode;
+        }
+
+        // Comment lines: PrintCommentLine inside a fiscal or return receipt, PrintNonFiscalLine inside a
+        // non-fiscal one. Empty lines are skipped. Returns the first error, or 0.
+        private int PrintLines(IEnumerable<CommentLines>? lines, bool nonFiscal)
+        {
+            foreach (var line in (lines ?? Enumerable.Empty<CommentLines>()).Where(l => l != null && !string.IsNullOrEmpty(l.CommentLine)))
+            {
+                int errorCode = nonFiscal
+                    ? Logged(_comManager.PrintNonFiscalLine(line.CommentLine, line.CommentLineAttrib), $"PrintNonFiscalLine with params ('{line.CommentLine}', {line.CommentLineAttrib})")
+                    : Logged(_comManager.PrintCommentLine(line.CommentLine, line.CommentLineAttrib), $"PrintCommentLine with params ('{line.CommentLine}', {line.CommentLineAttrib})");
+                if (errorCode != 0) return errorCode;
+            }
+            return 0;
+        }
+
+        // Prints each item followed by its own comment lines. Returns the first error, or 0.
+        private int PrintItems<T>(IEnumerable<T>? items, Func<T, int> printItem, Func<T, IEnumerable<CommentLines>?> commentLines, bool nonFiscal)
+        {
+            foreach (var item in (items ?? Enumerable.Empty<T>()).Where(i => i != null))
+            {
+                int errorCode = printItem(item);
+                if (errorCode != 0) return errorCode;
+                if ((errorCode = PrintLines(commentLines(item), nonFiscal)) != 0) return errorCode;
+            }
+            return 0;
+        }
+
+        // A sold (or, in a return receipt, returned) item and its optional discount/surcharge.
+        private int PrintSaleItem(ReceiptItems item)
+        {
+            int errorCode = Logged(_comManager.PrintRecItemEx(item.ItemDescription, item.ItemQuantity, item.ItemPrice, item.VatID, item.ItemUnit, item.ItemGroup),
+                $"PrintRecItemEx with params ('{item.ItemDescription}', {item.ItemQuantity}, {item.ItemPrice}, {item.VatID}, '{item.ItemUnit}', '{item.ItemGroup}')");
+            if (errorCode != 0 || item.ItemDiscount == null || item.ItemDiscount.ItemDiscountType == 999) return errorCode;
+            return Logged(_comManager.DiscountAdditionForItem(item.ItemDiscount.ItemDiscountType, item.ItemDiscount.ItemDiscountAmount),
+                $"DiscountAdditionForItem with params ({item.ItemDiscount.ItemDiscountType}, {item.ItemDiscount.ItemDiscountAmount})");
+        }
+
+        private int PrintDepositReceive(DepositReceive item) =>
+            Logged(_comManager.PrintDepositReceive(item.DepositReceiveDesc, item.DepositReceiveQ, item.DepositReceivePrice),
+                $"PrintDepositReceive with params ('{item.DepositReceiveDesc}', {item.DepositReceiveQ}, {item.DepositReceivePrice})");
+
+        private int PrintTareDeposit(PrintTareDeposit item) =>
+            Logged(_comManager.PrintTareDeposit(item.Description, item.Quantity, item.UnitPrice),
+                $"PrintTareDeposit with params ('{item.Description}', {item.Quantity}, {item.UnitPrice})");
+
+        private int PrintTareDepositVoid(PrintTareDepositVoid item) =>
+            Logged(_comManager.PrintTareDepositVoid(item.Description, item.Quantity, item.UnitPrice),
+                $"PrintTareDepositVoid with params ('{item.Description}', {item.Quantity}, {item.UnitPrice})");
+
+        private int ApplyReceiptDiscount(ReceiptDiscount? discount)
+        {
+            if (discount == null || discount.ReceiptDiscountType == 999) return 0;
+            return Logged(_comManager.DiscountAdditionForReceipt(discount.ReceiptDiscountType, discount.ReceiptDiscountAmount),
+                $"DiscountAdditionForReceipt with params ({discount.ReceiptDiscountType}, {discount.ReceiptDiscountAmount})");
+        }
+
+        private int SetFooter(SetFooter? footer)
+        {
+            if (footer == null) return 0;
+            return Logged(_comManager.SetFooter(footer.line1, footer.line2, footer.line3, footer.line4), $"SetFooter with params ('{footer.line1}', etc)");
         }
     }
 }
