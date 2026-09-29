@@ -1,0 +1,32 @@
+name: Build and test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      # The service and its tests are 32-bit (EmpiFisX is a 32-bit COM server), so the test host
+      # needs the x86 .NET runtimes, which the runner doesn't have.
+      - name: Install x86 .NET 10 runtimes
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://dot.net/v1/dotnet-install.ps1 -OutFile dotnet-install.ps1
+          $dir = "$env:RUNNER_TEMP\dotnet-x86"
+          ./dotnet-install.ps1 -Channel 10.0 -Runtime windowsdesktop -Architecture x86 -InstallDir $dir
+          ./dotnet-install.ps1 -Channel 10.0 -Runtime aspnetcore -Architecture x86 -InstallDir $dir
+          "DOTNET_ROOT_X86=$dir" >> $env:GITHUB_ENV
+
+      - name: Build
+        run: dotnet build empifisJsonService2.sln -c Release
+
+      - name: Test
+        run: dotnet test tests/empifisJsonService2.Tests -c Release --no-build
