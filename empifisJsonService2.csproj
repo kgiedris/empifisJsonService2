@@ -15,7 +15,7 @@
   <!-- Allow building/publishing for other RIDs if needed -->
   <RuntimeIdentifiers>win-x86;win-x64</RuntimeIdentifiers>
     <EnableComHosting>true</EnableComHosting>
-    <Version>2.1.7</Version>
+    <Version>2.2.0</Version>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Empirija">
