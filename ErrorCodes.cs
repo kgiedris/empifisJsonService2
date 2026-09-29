@@ -6,7 +6,7 @@ namespace empifisJsonAPI2
     /// Descriptions from the manual's "Error Codes" table, used as the ErrorMessage when the fiscal
     /// device or the service returns an error code without a message of its own.
     /// </summary>
-    public static class ErrorCodes
+    public static partial class ErrorCodes
     {
         private static readonly Dictionary<int, string> Descriptions = new()
         {
@@ -75,7 +75,8 @@ namespace empifisJsonAPI2
         public static string Describe(int errorCode)
         {
             if (Descriptions.TryGetValue(errorCode, out var description)) return description;
-            // Worldline card terminal (ECR) codes are 10001-15002; see the ECR table in the manual.
+            // Worldline card terminal (ECR) codes, 10001-15002 (ErrorCodes.Ecr.cs).
+            if (EcrDescriptions.TryGetValue(errorCode, out var ecrDescription)) return $"Card terminal (ECR) error {ecrDescription}";
             if (errorCode >= 10000 && errorCode < 16000) return $"Card terminal (ECR) error {errorCode}. See the ECR error codes in the manual.";
             return $"Error {errorCode}.";
         }
