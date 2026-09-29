@@ -18,8 +18,12 @@ namespace empifisJsonAPI2
         private Interop.Empirija.EmpiFisX? _comObject;
         private Exception? _lastInitException;
         private readonly int _comTimeoutSeconds;
-        // When true, COM calls will not attempt to auto-initialize the COM object.
-        private bool _suppressAutoInit = false;
+        // COM calls in a row that timed out; any call that returns resets it. After a timeout the object
+        // is reloaded; if EmpiFis still doesn't answer, a reload can't help (see RestartProcess).
+        private int _consecutiveTimeouts;
+        private const int MaxConsecutiveTimeouts = 2;
+        // Calls slower than this are logged even when they succeed, as an early sign of EmpiFis getting stuck.
+        private static readonly TimeSpan SlowCallWarning = TimeSpan.FromSeconds(10);
         // Serializes creating, reloading and releasing the COM object.
         private readonly object _reloadLock = new object();
         // Serializes whole device operations (a full receipt or one /fiscalCommand) across HTTP and file-watcher callers.
@@ -45,10 +49,17 @@ namespace empifisJsonAPI2
                 if (!WaitForComCall(create))
                 {
                     _lastInitException = new TimeoutException($"Creating the Empirija COM object did not finish within {_comTimeoutSeconds} s.");
-                    _logger.Error($"{_lastInitException.Message} Abandoning its COM thread.");
+                    int timeoutsInARow = Interlocked.Increment(ref _consecutiveTimeouts);
+                    _logger.Error($"{_lastInitException.Message} ({timeoutsInARow} timeouts in a row) Abandoning its COM thread.");
                     // Release the object if the creation ever completes.
                     comThread.Shutdown(() => create.IsCompletedSuccessfully ? create.Result : null);
                     _comThread = null;
+                    // A hanging creation is EmpiFis being stuck too; a creation that fails with an error
+                    // (e.g. not registered) is not, and restarting wouldn't fix it.
+                    if (timeoutsInARow >= MaxConsecutiveTimeouts)
+                    {
+                        RestartProcess($"EmpiFis did not answer {timeoutsInARow} times in a row; creating EmpiFisX hangs.");
+                    }
                     return;
                 }
 
@@ -83,12 +94,6 @@ namespace empifisJsonAPI2
             if (_comObject != null) return true;
 
             _logger.Warn($"COM object is not initialized for '{methodName}'. Last init exception: {_lastInitException?.Message}");
-            if (_suppressAutoInit)
-            {
-                _logger.Warn($"Auto-initialization suppressed; refusing to initialize COM object for '{methodName}'.");
-                return false;
-            }
-
             _logger.Info($"Attempting to re-initialize COM object for '{methodName}'.");
             InitializeComObject();
             return _comObject != null;
@@ -116,13 +121,26 @@ namespace empifisJsonAPI2
             }
             if (comThread == null || comObject == null) return failure(999, "COM object could not be initialized.");
 
+            var elapsed = System.Diagnostics.Stopwatch.StartNew();
             var call = comThread.Invoke(() => comCall(comObject));
             if (!WaitForComCall(call))
             {
-                _logger.Warn($"COM method '{methodName}' timed out after {_comTimeoutSeconds} s. Abandoning its COM thread and reloading the object.");
+                int timeoutsInARow = Interlocked.Increment(ref _consecutiveTimeouts);
+                _logger.Warn($"COM method '{methodName}' timed out after {_comTimeoutSeconds} s ({timeoutsInARow} in a row). Abandoning its COM thread and reloading the object.");
                 var reloadSuccess = ReloadComObject(comThreadHung: true);
+                if (!reloadSuccess || timeoutsInARow >= MaxConsecutiveTimeouts)
+                {
+                    RestartProcess(reloadSuccess
+                        ? $"EmpiFis did not answer {timeoutsInARow} times in a row, even after reloading EmpiFisX."
+                        : $"EmpiFis did not answer '{methodName}' and EmpiFisX could not be reloaded ({_lastInitException?.Message}).");
+                }
                 // 555 = reload successful, 556 = reload unsuccessful
                 return failure(reloadSuccess ? 555 : 556, "COM method call timed out.");
+            }
+            Interlocked.Exchange(ref _consecutiveTimeouts, 0);
+            if (elapsed.Elapsed > SlowCallWarning)
+            {
+                _logger.Warn($"COM method '{methodName}' was slow: {elapsed.Elapsed.TotalSeconds:0.0} s (timeout {_comTimeoutSeconds} s).");
             }
 
             try
@@ -243,14 +261,13 @@ namespace empifisJsonAPI2
             return (errorCode, message ?? string.Empty);
         }, nameof(GetFiscalInfo), (errorCode, message) => (errorCode, message));
 
-        private bool ReloadComObject(bool comThreadHung = false)
+        private bool ReloadComObject(bool comThreadHung = false, TimeSpan? maxReleaseWait = null)
         {
             lock (_reloadLock)
             {
                 _logger.Info("Reloading the Empirija COM object.");
-                ReleaseComObject(waitForRelease: !comThreadHung);
+                ReleaseComObject(waitForRelease: !comThreadHung, maxReleaseWait);
 
-                _suppressAutoInit = false;
                 InitializeComObject();
                 bool loaded = _comObject != null;
                 if (loaded)
@@ -295,37 +312,38 @@ namespace empifisJsonAPI2
             }
         }
 
-        // Public control methods for diagnostics/tests
         /// <summary>
-        /// Force unload the COM object without attempting to re-initialize.
-        /// Useful for testing unload/reload behaviour.
+        /// The ReloadEmpiFis command: replaces EmpiFisX with a new object on a new thread (the old one may be
+        /// stuck, so its release is waited for at most 5 s), then checks that the device answers by reading
+        /// the EmpiFis version. Nothing is printed.
         /// </summary>
-        public void Unload()
+        public (int errorCode, string message) ReloadAndCheck()
         {
-            _logger.Info("Unloading the Empirija COM object on user request.");
-            lock (_reloadLock)
+            _logger.Info("ReloadEmpiFis requested.");
+            if (!ReloadComObject(maxReleaseWait: TimeSpan.FromSeconds(5)))
             {
-                _suppressAutoInit = true;
-                ReleaseComObject(waitForRelease: true);
+                return (556, $"EmpiFisX could not be reloaded: {_lastInitException?.Message}");
             }
+            var (errorCode, version) = GetFiscalInfo(4);
+            return errorCode == 0
+                ? (0, $"EmpiFisX reloaded; the fiscal device answers (EmpiFis {version}).")
+                : (errorCode, $"EmpiFisX reloaded, but the fiscal device did not answer: {ErrorCodes.Describe(errorCode)}");
         }
 
-        /// <summary>
-        /// Force load/reload the COM object explicitly and return whether it is loaded.
-        /// This also reenables auto-initialization.
-        /// </summary>
-        public bool Load()
+        // EmpiFis is stuck beyond what a reload fixes: a hung EmpiFisX can't be removed from a running
+        // process and may keep holding the device, so end the process and let Windows restart the service
+        // (install-and-update.bat sets the recovery options). A tray (interactive) run only logs it.
+        private static void RestartProcess(string reason)
         {
-            _logger.Info("Explicitly loading the Empirija COM object on user request.");
-            _suppressAutoInit = false;
-            InitializeComObject();
-            return _comObject != null;
+            if (!Microsoft.Extensions.Hosting.WindowsServices.WindowsServiceHelpers.IsWindowsService())
+            {
+                _logger.Error($"{reason} Restart empifisJsonService2 to recover.");
+                return;
+            }
+            _logger.Fatal($"{reason} Ending the process so Windows restarts the service.");
+            NLog.LogManager.Flush(TimeSpan.FromSeconds(5));
+            Environment.FailFast($"empifisJsonService2: {reason}");
         }
-
-        /// <summary>
-        /// Returns true if the COM object is currently loaded.
-        /// </summary>
-        public bool IsLoaded() => _comObject != null;
 
         /// <summary>
         /// Waits for exclusive use of the fiscal device; dispose the result to release it.

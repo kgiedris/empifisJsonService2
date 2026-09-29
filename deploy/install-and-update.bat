@@ -94,12 +94,16 @@ echo.
 :: Create the new service - The binPath must have a space after the equal sign
 echo Creating new service "%SERVICE_NAME%"...
 sc create "%SERVICE_NAME%" binPath= "%BIN_PATH%" start= %START_TYPE% DisplayName= "%DISPLAY_NAME%"
-if %errorlevel% equ 0 (
-    echo Service created successfully. Start it with run-service.bat or from Services.
-    echo Log: C:\Altera\Log\json2.log
-) else (
+if %errorlevel% neq 0 (
     echo Error: Failed to create service. Check the messages above for details.
+    goto :end
 )
+:: If EmpiFis gets stuck and reloading it doesn't help, the service ends its own process; Windows
+:: then restarts it: after 5 s, after 30 s, then every 5 minutes (the count resets after a day).
+sc failure "%SERVICE_NAME%" reset= 86400 actions= restart/5000/restart/30000/restart/300000 >nul
+sc failureflag "%SERVICE_NAME%" 1 >nul
+echo Service created successfully, with automatic restart if it fails.
+echo Start it with run-service.bat or from Services. Log: C:\Altera\Log\json2.log
 echo.
 goto :end
 

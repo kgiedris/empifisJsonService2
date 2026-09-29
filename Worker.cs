@@ -40,6 +40,8 @@ namespace empifisJsonAPI2
             _logger.Info($"Output File Path: {_config.JsonPathConfig.OutFilePath}");
             _logger.Info("---------------------------");
 
+            await CheckFiscalDeviceAsync();
+
             if (_config.servicePort.file_mode?.ToLower() == "on")
             {
                 _logger.Info("File processing mode is ON. Starting file monitor loop.");
@@ -55,6 +57,24 @@ namespace empifisJsonAPI2
             }
 
             _logger.Info("Worker stopping.");
+        }
+
+        // Confirms in the log at every start that EmpiFis answers. The first call also opens EmpiFis's
+        // connection to the device (2-3 s), so the first POS request doesn't wait for it.
+        private async Task CheckFiscalDeviceAsync()
+        {
+            using (await _comManager.AcquireDeviceLockAsync())
+            {
+                var version = _comManager.GetFiscalInfo(4);
+                if (version.errorCode != 0)
+                {
+                    _logger.Error($"Fiscal device check at startup failed: {version.errorCode} {ErrorCodes.Describe(version.errorCode)} {version.message}");
+                    return;
+                }
+                var register = _comManager.GetFiscalInfo(3);
+                var state = _comManager.GetFiscalInfo(9);
+                _logger.Info($"Fiscal device answers: EmpiFis {version.message}, cash register {register.message}, state {state.message}.");
+            }
         }
 
         private async Task FileMonitorLoop(CancellationToken stoppingToken)

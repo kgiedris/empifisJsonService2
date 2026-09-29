@@ -241,40 +241,6 @@ app.Use(async (context, next) =>
 
 app.MapFiscalEndpoints();
 
-// Diagnostic endpoint: test PrintX, Unload COM, verify error, Load COM, PrintX again.
-// POST only: it prints three X reports, so a browser visit or link preview must not trigger it.
-app.MapPost("/diag/test-printx-unload-reload", async (EmpifisComManager comManager) =>
-{
-    using var deviceLock = await comManager.AcquireDeviceLockAsync();
-    var results = new Dictionary<string, object?>();
-
-    logger.Info("Starting diagnostic: PrintX -> Unload -> PrintX -> Load -> PrintX");
-
-    // 1) First PrintX
-    int first = comManager.PrintXReport();
-    results["firstPrintX"] = first;
-
-    // 2) Unload COM
-    comManager.Unload();
-    results["afterUnload_isLoaded"] = comManager.IsLoaded();
-
-    // 3) Attempt PrintX after unload (should return 999 or similar error)
-    int second = comManager.PrintXReport();
-    results["secondPrintX_afterUnload"] = second;
-
-    // 4) Load COM explicitly
-    bool loaded = comManager.Load();
-    results["afterLoad_isLoaded"] = loaded;
-
-    // 5) PrintX after load
-    int third = comManager.PrintXReport();
-    results["thirdPrintX_afterLoad"] = third;
-
-    logger.Info($"Diagnostic completed. Results: first={first}, second={second}, third={third}, loaded={loaded}");
-
-    return Results.Json(results);
-});
-
 // Diagnostic path echo endpoint
 app.MapGet("/diag/echo-path", (HttpContext context) =>
 {

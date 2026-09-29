@@ -48,6 +48,12 @@ namespace empifisJsonAPI2
                             case "resetfiscal":
                                 jsonResponse.ErrorCode = comManager.ResetFiscal();
                                 break;
+                            case "reloadempifis":
+                                // For when EmpiFis seems stuck: new EmpiFisX, then check the device answers. Prints nothing.
+                                var reload = comManager.ReloadAndCheck();
+                                jsonResponse.ErrorCode = reload.errorCode;
+                                jsonResponse.ErrorMessage = reload.message;
+                                break;
                             case "getfiscalinfo":
                                 if (jsonCommand.GetFiscalInfo != null)
                                 {

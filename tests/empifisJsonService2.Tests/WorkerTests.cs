@@ -42,6 +42,19 @@ public sealed class WorkerTests : IDisposable
         Assert.True(done(), "The worker did not finish in time.");
     }
 
+    // At start the worker reads version, cash register and state (GetFiscalInfo 4, 3, 9).
+    private static readonly string[] StartupCheck = { "GetFiscalInfo(4)", "GetFiscalInfo(3)", "GetFiscalInfo(9)" };
+
+    private List<string> DeviceCallsAfterStartupCheck() => _device.Calls.Skip(StartupCheck.Length).ToList();
+
+    [Fact]
+    public async Task Startup_ChecksThatTheFiscalDeviceAnswers()
+    {
+        await RunUntil(() => _device.Calls.Count >= StartupCheck.Length);
+
+        Assert.Equal(StartupCheck, _device.Calls.Take(StartupCheck.Length));
+    }
+
     [Fact]
     public async Task InterruptedRequest_IsQuarantinedAndAnswered557_NotResent()
     {
@@ -49,7 +62,7 @@ public sealed class WorkerTests : IDisposable
 
         await RunUntil(() => File.Exists(_out + "outReceipt_1.json"));
 
-        Assert.Empty(_device.Calls);
+        Assert.Empty(DeviceCallsAfterStartupCheck());
         Assert.Contains("\"ErrorCode\": 557", File.ReadAllText(_out + "outReceipt_1.json"));
         Assert.Single(Directory.GetFiles(Path.Combine(_in, "unconfirmed")));
         Assert.Empty(Directory.GetFiles(_in));
@@ -76,7 +89,7 @@ public sealed class WorkerTests : IDisposable
 
         await RunUntil(() => File.Exists(_out + "outReceipt_3.json") && !File.Exists(_in + "inReceipt_3.json.processing"));
 
-        Assert.Equal(new[] { "PrintXReport" }, _device.CallNames);
+        Assert.Equal(new[] { "PrintXReport()" }, DeviceCallsAfterStartupCheck());
         Assert.Contains("\"ErrorCode\": 0", File.ReadAllText(_out + "outReceipt_3.json"));
         Assert.True(File.Exists(_out + "outReceipt_recent.json"), "A recent response of another receipt was deleted.");
         Assert.False(File.Exists(_out + "outReceipt_old.json"), "A response older than a day was kept.");
