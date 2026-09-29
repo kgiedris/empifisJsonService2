@@ -64,7 +64,7 @@ Windows service that accepts receipts as JSON (HTTP on port 5006: `/fullReceipt`
 
 ## Plan / open items
 
-1. **Installer (Inno Setup 7, `C:\Program Files\Inno Setup 7`)** for a fresh PC: installs the service to `C:\Altera\EmpifisJsonAPI` and ReceiptTester to `C:\Altera\ReceiptTester`, creates `C:\Altera\Log` (and Archive) if missing, keeps an existing `config.json`, registers the service (same checks/settings as `install-and-update.bat`).
+1. **Installer (Inno Setup 7, `C:\Program Files\Inno Setup 7`)** for a fresh PC: installs the service to `C:\Altera\EmpifisJsonAPI` and ReceiptTester to `C:\Altera\ReceiptTester`, creates `C:\Altera\Log` (and Archive) if missing, keeps an existing `config.json`, registers the service (same checks/settings as `install-and-update.bat`). The latest manual (`empifisJSON_*.docx`) goes into the service folder, `C:\Altera\EmpifisJsonAPI` (the Till publish output already contains it).
 2. **ReceiptTester review first** (`C:\ReceiptTester`, repo kgiedris/ReceiptTester, WPF, .NET 9, branch v0.3; a build is in `C:\Altera\ReceiptTester`): look for improvements, upgrade to .NET 10, decide self-contained or not for the installer.
 3. Pilot 2.3.1 at the customer where EmpiFis got stuck; afterwards check `json2.log`/archives for "was slow", "timed out", "Ending the process", and the Windows Application log.
 4. Have the manual's tracked changes accepted in Word and the table of contents updated.
