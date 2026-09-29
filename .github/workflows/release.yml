@@ -1,11 +1,18 @@
 name: Release package
 
-# Publishing a GitHub release (tag vX.Y.Z) builds, tests and attaches the till install package
-# (self-contained win-x86 zip). CI always uses the latest .NET 10 SDK, so each release carries the
-# current .NET runtime security fixes.
+# Publishing a GitHub release (tag vX.Y.Z) builds and tests that tag and attaches:
+#   - empifisJsonService2-X.Y.Z-win-x86.zip  (the self-contained service folder)
+#   - EmpifisJsonSetup-X.Y.Z.exe            (the installer, with ReceiptTester as an optional component)
+# CI always uses the latest .NET 10 SDK, so each release carries the current .NET runtime fixes.
+#
+# The installer needs the private ReceiptTester repository: add a secret RECEIPTTESTER_TOKEN (a fine-grained
+# token with read access to kgiedris/ReceiptTester contents). Without it, only the zip is built.
+#
+# "Run workflow" (workflow_dispatch) builds the same files as downloadable artifacts, without a release.
 on:
   release:
     types: [published]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -13,10 +20,12 @@ permissions:
 jobs:
   package:
     runs-on: windows-latest
+    env:
+      HAS_TESTER_TOKEN: ${{ secrets.RECEIPTTESTER_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ github.event.release.tag_name || github.ref }}
 
       - uses: actions/setup-dotnet@v6
         with:
@@ -34,15 +43,46 @@ jobs:
       - name: Test
         run: dotnet test tests/empifisJsonService2.Tests -c Release
 
-      - name: Publish till package
+      # Under installer/build, which the service project excludes and git ignores.
+      - name: Check out ReceiptTester
+        if: env.HAS_TESTER_TOKEN == 'true'
+        uses: actions/checkout@v7
+        with:
+          repository: kgiedris/ReceiptTester
+          ref: master
+          path: installer/build/ReceiptTester-src
+          token: ${{ secrets.RECEIPTTESTER_TOKEN }}
+
+      - name: Build the installer
+        if: env.HAS_TESTER_TOKEN == 'true'
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          ./installer/build-installer.ps1 -ReceiptTesterRepo "$env:GITHUB_WORKSPACE\installer\build\ReceiptTester-src"
+
+      - name: Publish the service package
+        if: env.HAS_TESTER_TOKEN != 'true'
         run: dotnet publish empifisJsonService2.csproj -p:PublishProfile=Till
 
-      - name: Attach zip to the release
+      - name: Collect files
+        shell: pwsh
+        run: |
+          $version = ([xml](Get-Content empifisJsonService2.csproj)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
+          New-Item -ItemType Directory dist | Out-Null
+          Compress-Archive -Path bin\publish\till\* -DestinationPath "dist\empifisJsonService2-$version-win-x86.zip"
+          Copy-Item installer\output\*.exe dist\ -ErrorAction SilentlyContinue
+          Get-ChildItem dist | ForEach-Object { "{0}  {1:n1} MB" -f $_.Name, ($_.Length / 1MB) }
+
+      - name: Attach to the release
+        if: github.event_name == 'release'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          $tag = "${{ github.event.release.tag_name }}"
-          $zip = "empifisJsonService2-$($tag.TrimStart('v'))-win-x86.zip"
-          Compress-Archive -Path bin\publish\till\* -DestinationPath $zip
-          gh release upload $tag $zip --clobber
+        run: gh release upload "${{ github.event.release.tag_name }}" (Get-ChildItem dist).FullName --clobber
+
+      - name: Upload as artifacts
+        if: github.event_name != 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-files
+          path: dist/
