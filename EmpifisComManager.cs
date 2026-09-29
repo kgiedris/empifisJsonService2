@@ -259,7 +259,7 @@ namespace empifisJsonAPI2
         // Releases the object on the thread that owns it and ends that thread. When the thread is stuck
         // in a hung call, don't wait: the release runs whenever (if ever) the call returns, and a new
         // thread is used from now on.
-        private void ReleaseComObject(bool waitForRelease)
+        private void ReleaseComObject(bool waitForRelease, TimeSpan? maxWait = null)
         {
             lock (_reloadLock)
             {
@@ -272,7 +272,10 @@ namespace empifisJsonAPI2
                 var shutdown = oldThread.Shutdown(() => oldObject);
                 if (!waitForRelease) return;
 
-                if (!WaitForComCall(shutdown))
+                bool released = maxWait.HasValue
+                    ? ((IAsyncResult)shutdown).AsyncWaitHandle.WaitOne(maxWait.Value)
+                    : WaitForComCall(shutdown);
+                if (!released)
                 {
                     _logger.Warn("Releasing the Empirija COM object did not finish in time; continuing without waiting.");
                 }
@@ -333,7 +336,8 @@ namespace empifisJsonAPI2
             public void Dispose() => Interlocked.Exchange(ref _semaphore, null)?.Release();
         }
 
-        // Called by the DI container on host shutdown.
-        public void Dispose() => ReleaseComObject(waitForRelease: true);
+        // Called by the DI container on host shutdown. Bounded so a stuck device can't hold up a
+        // Windows service stop past the time the Service Control Manager allows.
+        public void Dispose() => ReleaseComObject(waitForRelease: true, maxWait: TimeSpan.FromSeconds(5));
     }
 }

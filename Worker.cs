@@ -145,7 +145,7 @@ namespace empifisJsonAPI2
                     var response = new ResponseJson
                     {
                         ErrorCode = 557,
-                        ErrorMessage = "Receipt processing was interrupted by a service restart. The receipt may or may not have been printed - check the fiscal device before resending."
+                        ErrorMessage = ErrorCodes.Describe(557)
                     };
                     string responseJsonString;
                     using (await _comManager.AcquireDeviceLockAsync())

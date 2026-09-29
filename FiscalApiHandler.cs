@@ -554,7 +554,7 @@ namespace empifisJsonAPI2
 
                         if (string.IsNullOrEmpty(jsonResponse.ErrorMessage))
                         {
-                            jsonResponse.ErrorMessage = jsonResponse.ErrorCode == 0 ? "Success" : "Error";
+                            jsonResponse.ErrorMessage = jsonResponse.ErrorCode == 0 ? "Success" : ErrorCodes.Describe(jsonResponse.ErrorCode);
                         }
                     }
                 }

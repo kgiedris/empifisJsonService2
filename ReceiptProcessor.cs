@@ -108,9 +108,7 @@ namespace empifisJsonAPI2
                 // If message is empty (i.e., not set by the catch block), provide a generic error
                 if (string.IsNullOrEmpty(message))
                 {
-                    message = errorCode == 555 || errorCode == 556
-                        ? "The fiscal device did not respond in time. The receipt may still have been printed - check the device before resending."
-                        : "Error during receipt processing.";
+                    message = ErrorCodes.Describe(errorCode);
                 }
             }
             else if (string.IsNullOrEmpty(message))
