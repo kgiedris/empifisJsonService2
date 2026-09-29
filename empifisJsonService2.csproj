@@ -14,7 +14,7 @@
   <RuntimeIdentifier>win-x86</RuntimeIdentifier>
   <!-- Allow building/publishing for other RIDs if needed -->
   <RuntimeIdentifiers>win-x86;win-x64</RuntimeIdentifiers>
-    <Version>2.3.3</Version>
+    <Version>2.3.4</Version>
     <!-- Leave out the framework's translated resource files; keeps the install package smaller. -->
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <!-- A small single-device service: workstation GC uses far less memory on a till than server GC. -->
