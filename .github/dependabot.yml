@@ -1,0 +1,18 @@
+# Pull requests for package updates; CI (build.yml) tests each one. .NET runtime fixes for the
+# self-contained package come with the SDK used by release.yml, not from these packages.
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directories:
+      - "/"
+      - "/tests/empifisJsonService2.Tests"
+    schedule:
+      interval: weekly
+    groups:
+      nuget:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly

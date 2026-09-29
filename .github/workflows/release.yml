@@ -1,0 +1,48 @@
+name: Release package
+
+# Publishing a GitHub release (tag vX.Y.Z) builds, tests and attaches the till install package
+# (self-contained win-x86 zip). CI always uses the latest .NET 10 SDK, so each release carries the
+# current .NET runtime security fixes.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install x86 .NET 10 runtimes for the tests
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://dot.net/v1/dotnet-install.ps1 -OutFile dotnet-install.ps1
+          $dir = "$env:RUNNER_TEMP\dotnet-x86"
+          ./dotnet-install.ps1 -Channel 10.0 -Runtime windowsdesktop -Architecture x86 -InstallDir $dir
+          ./dotnet-install.ps1 -Channel 10.0 -Runtime aspnetcore -Architecture x86 -InstallDir $dir
+          "DOTNET_ROOT_X86=$dir" >> $env:GITHUB_ENV
+
+      - name: Test
+        run: dotnet test tests/empifisJsonService2.Tests -c Release
+
+      - name: Publish till package
+        run: dotnet publish empifisJsonService2.csproj -p:PublishProfile=Till
+
+      - name: Attach zip to the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.event.release.tag_name }}"
+          $zip = "empifisJsonService2-$($tag.TrimStart('v'))-win-x86.zip"
+          Compress-Archive -Path bin\publish\till\* -DestinationPath $zip
+          gh release upload $tag $zip --clobber
