@@ -3,8 +3,9 @@
 ;   /DAppVersion=2.3.2 /DServiceDir=<Till publish folder> /DTesterExe=<ReceiptTester.exe> /DManualFile=<docx name>
 ;
 ; Works for a fresh PC and for updating a PC where the service was only unzipped: it stops the running
-; service, removes files of older builds, keeps config.json and the service's start type, and registers
-; the service like deploy\install-and-update.bat.
+; service, removes files of older builds, keeps config.json, and registers the service like
+; deploy\install-and-update.bat. ReceiptTester and automatic start are unticked by default; on an update the
+; autostart checkbox shows the service's current start type (a silent update without /TASKS keeps it).
 
 #ifndef AppVersion
   #error Build with installer\build-installer.ps1 (AppVersion, ServiceDir, TesterExe, ManualFile)
@@ -40,6 +41,10 @@ UninstallDisplayName=EmpiFis JSON Service
 UninstallDisplayIcon={app}\{#ServiceExe}
 ; The service and running apps are stopped in [Code] (PrepareToInstall).
 CloseApplications=no
+; Don't reuse the previous run's choices: ReceiptTester must start unticked every time, and the
+; autostart checkbox is set from the service's current start type in InitializeWizard.
+UsePreviousSetupType=no
+UsePreviousTasks=no
 
 [Types]
 Name: "standard"; Description: "EmpiFis JSON service"
@@ -51,7 +56,8 @@ Name: "service"; Description: "EmpiFis JSON service ({#ServiceFolder})"; Types: 
 Name: "tester"; Description: "ReceiptTester test tool ({#TesterFolder}) - prints real receipts and Z reports, not for customer tills"; Types: full
 
 [Tasks]
-Name: "autostart"; Description: "Start the service automatically with Windows (needed on a till)"; Flags: unchecked; Check: IsNewServiceInstall
+; Unticked for a new install; on an update it shows the service's current start type (InitializeWizard).
+Name: "autostart"; Description: "Start the service automatically with Windows (needed on a till)"; Flags: unchecked
 Name: "firewall"; Description: "Allow the POS on other computers to connect (Windows Firewall rule for the service port)"
 
 [Dirs]
@@ -87,6 +93,7 @@ Filename: "{sys}\sc.exe"; Parameters: "start {#ServiceName}"; Description: "Star
 [Code]
 var
   ServiceExistedBefore: Boolean;
+  ServiceWasAutoStart: Boolean;
   ServiceWasRunning: Boolean;
 
 function RunHidden(const FileName, Params: String): Integer;
@@ -112,11 +119,6 @@ begin
   Result := RunHidden(ExpandConstant('{cmd}'), '/C sc query ' + Name + ' >nul') = 0;
 end;
 
-function IsNewServiceInstall: Boolean;
-begin
-  Result := not ServiceExistedBefore;
-end;
-
 function OfferServiceStart: Boolean;
 begin
   { A service that was running before the update is started again automatically. }
@@ -126,7 +128,27 @@ end;
 function InitializeSetup: Boolean;
 begin
   ServiceExistedBefore := ServiceExists('{#ServiceName}');
+  ServiceWasAutoStart := ServiceExistedBefore and
+    (RunHidden(ExpandConstant('{cmd}'), '/C sc qc {#ServiceName} | find "AUTO_START" >nul') = 0);
   Result := True;
+end;
+
+procedure InitializeWizard;
+begin
+  { Show the current start type, so clicking through an update keeps it. }
+  if ServiceWasAutoStart then
+    WizardSelectTasks('autostart');
+end;
+
+{ /TASKS given on the command line: the caller chose the start type explicitly. }
+function TasksGivenOnCommandLine: Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := 1 to ParamCount do
+    if Pos('/TASKS=', Uppercase(ParamStr(I))) = 1 then
+      Result := True;
 end;
 
 procedure StopService;
@@ -228,17 +250,21 @@ var
   BinPath, StartType: String;
 begin
   BinPath := ExpandConstant('{app}\{#ServiceExe}');
-  if ServiceExists('{#ServiceName}') then
-    { Update: keep the start type the service already has (a till's automatic start must stay). }
-    Sc('config {#ServiceName} binPath= "' + BinPath + '" DisplayName= "{#ServiceDisplayName}"')
+  if WizardIsTaskSelected('autostart') then
+    StartType := 'auto'
   else
+    StartType := 'demand';
+  if ServiceExists('{#ServiceName}') then
   begin
-    if WizardIsTaskSelected('autostart') then
-      StartType := 'auto'
+    { A silent update without /TASKS keeps the existing start type (a till's automatic start must
+      stay); interactively the checkbox was preset to it, so the user's choice applies. }
+    if WizardSilent and not TasksGivenOnCommandLine then
+      Sc('config {#ServiceName} binPath= "' + BinPath + '" DisplayName= "{#ServiceDisplayName}"')
     else
-      StartType := 'demand';
+      Sc('config {#ServiceName} binPath= "' + BinPath + '" start= ' + StartType + ' DisplayName= "{#ServiceDisplayName}"');
+  end
+  else
     Sc('create {#ServiceName} binPath= "' + BinPath + '" start= ' + StartType + ' DisplayName= "{#ServiceDisplayName}"');
-  end;
   Sc('description {#ServiceName} "Receives JSON receipts (HTTP or files) and prints them on the Empirija fiscal device."');
   { If EmpiFis gets stuck the service ends itself; Windows restarts it after 5 s, 30 s, then every 5 minutes. }
   Sc('failure {#ServiceName} reset= 86400 actions= restart/5000/restart/30000/restart/300000');
