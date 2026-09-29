@@ -34,6 +34,13 @@
     <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing" Version="9.0.8" />
   </ItemGroup>
   <ItemGroup>
+    <!-- The test project lives under tests\; keep its sources and build output out of this project. -->
+    <Compile Remove="tests\**" />
+    <Content Remove="tests\**" />
+    <None Remove="tests\**" />
+    <EmbeddedResource Remove="tests\**" />
+  </ItemGroup>
+  <ItemGroup>
     <Content Update="nlog.config">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>

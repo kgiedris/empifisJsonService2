@@ -112,6 +112,7 @@ builder.Services.Configure<AppConfig>(builder.Configuration);
 // Add services for the API and worker
 builder.Services.AddControllers();
 builder.Services.AddSingleton<EmpifisComManager>();
+builder.Services.AddSingleton<IFiscalDevice>(sp => sp.GetRequiredService<EmpifisComManager>());
 builder.Services.AddSingleton<ReceiptProcessor>();
 builder.Services.AddHostedService<Worker>();
 builder.Services.AddWindowsService();

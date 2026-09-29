@@ -8,9 +8,9 @@ namespace empifisJsonAPI2
     public class ReceiptProcessor
     {
         private static readonly NLog.ILogger _logger = LogManager.GetCurrentClassLogger();
-        private readonly EmpifisComManager _comManager;
+        private readonly IFiscalDevice _comManager;
 
-        public ReceiptProcessor(EmpifisComManager comManager)
+        public ReceiptProcessor(IFiscalDevice comManager)
         {
             _comManager = comManager;
         }

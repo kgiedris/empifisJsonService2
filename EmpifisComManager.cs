@@ -8,7 +8,7 @@ using System.Reflection;
 
 namespace empifisJsonAPI2
 {
-    public class EmpifisComManager : IDisposable
+    public class EmpifisComManager : IFiscalDevice, IDisposable
     {
         private static readonly NLog.ILogger _logger = LogManager.GetCurrentClassLogger();
         // EmpiFisX is registered as apartment-threaded, so it is created, called and released only on

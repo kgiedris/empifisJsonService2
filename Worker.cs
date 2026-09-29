@@ -15,11 +15,11 @@ namespace empifisJsonAPI2
     public class Worker : BackgroundService
     {
         private static readonly NLog.ILogger _logger = LogManager.GetCurrentClassLogger();
-        private readonly EmpifisComManager _comManager;
+        private readonly IFiscalDevice _comManager;
         private readonly AppConfig _config;
         private readonly ReceiptProcessor _receiptProcessor;
 
-        public Worker(EmpifisComManager comManager, IOptions<AppConfig> config, ReceiptProcessor receiptProcessor)
+        public Worker(IFiscalDevice comManager, IOptions<AppConfig> config, ReceiptProcessor receiptProcessor)
         {
             _comManager = comManager;
             _config = config.Value;
