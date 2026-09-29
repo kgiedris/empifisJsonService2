@@ -78,5 +78,6 @@ Windows service that accepts receipts as JSON (HTTP on port 5006: `/fullReceipt`
 3. Pilot 2.3.2 at the customer where EmpiFis got stuck; afterwards check `json2.log`/archives for "was slow", "timed out", "Ending the process", and the Windows Application log.
 4. ~~Accept the manual's tracked changes~~ – done; `Cors.AllowedOrigins` (empty) added to the default config and to this PC's config.json.
 5. Tell POS integrators: don't resend automatically on 555/556/557.
-6. Check that GitHub accepted the Dependabot config; merge its update PRs (actions/checkout and setup-dotnet v4 use a retiring Node.js).
+6. ~~Dependabot~~ – works; first PRs merged for 2.3.3 (NLog 6.0.3 → 6.2.1 – log rotation re-verified with the simulation, Newtonsoft.Json 13.0.4, test packages, actions/checkout v7, setup-dotnet v6). Before merging an NLog update, re-check the daily archive naming/cleanup.
+   ReceiptTester 0.5 (in the 2.3.3 installer): Random batch weights Fiscal/Non-Fiscal 5, Z Report 0.5, others 1, and it always ends with a Z report.
 7. Optional: replace the installed build in `C:\Altera\EmpifisJsonAPI` (same code, label `+c09e035`) with the release zip (`+38efed6`).
