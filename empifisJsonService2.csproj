@@ -31,10 +31,10 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Mvc.NewtonsoftJson" Version="10.0.12" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.12" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageReference Include="NLog" Version="6.0.3" />
-    <PackageReference Include="NLog.Extensions.Hosting" Version="6.0.3" />
-    <PackageReference Include="NLog.Extensions.Logging" Version="6.0.3" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageReference Include="NLog" Version="6.2.1" />
+    <PackageReference Include="NLog.Extensions.Hosting" Version="6.2.1" />
+    <PackageReference Include="NLog.Extensions.Logging" Version="6.2.1" />
   </ItemGroup>
   <ItemGroup>
     <!-- The test project (tests\) and the installer sources (installer\) are not part of the service. -->
