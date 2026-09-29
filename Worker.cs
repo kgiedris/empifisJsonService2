@@ -59,7 +59,7 @@ namespace empifisJsonAPI2
 
         private async Task FileMonitorLoop(CancellationToken stoppingToken)
         {
-            RecoverOrphanedProcessingFiles();
+            await QuarantineOrphanedProcessingFilesAsync();
 
             while (!stoppingToken.IsCancellationRequested)
             {
@@ -100,32 +100,64 @@ namespace empifisJsonAPI2
             }
         }
 
-        // Requeues any "*.json.processing" files left behind by a previous run that crashed
-        // or was killed mid-processing, so they get picked up by the normal monitor loop
-        // instead of being silently lost forever (they no longer match the "inReceipt*.json" glob).
-        private void RecoverOrphanedProcessingFiles()
+        // Handles "*.json.processing" files left behind by a previous run that crashed or was killed
+        // mid-processing. The receipt may already have been printed, so resending it could produce a
+        // duplicate fiscal receipt. Instead the request is moved to an "unconfirmed" folder for a person
+        // to check, and the POS gets a 557 response (unless a real response was already written).
+        private async Task QuarantineOrphanedProcessingFilesAsync()
         {
             try
             {
                 if (!Directory.Exists(_config.JsonPathConfig.InFilePath)) return;
 
-                foreach (var processingPath in Directory.GetFiles(_config.JsonPathConfig.InFilePath, "inReceipt*.json.processing"))
+                var orphans = Directory.GetFiles(_config.JsonPathConfig.InFilePath, "inReceipt*.json.processing");
+                if (orphans.Length == 0) return;
+
+                var unconfirmedDir = Path.Combine(_config.JsonPathConfig.InFilePath, "unconfirmed");
+                Directory.CreateDirectory(unconfirmedDir);
+
+                foreach (var processingPath in orphans)
                 {
                     var originalPath = processingPath.Substring(0, processingPath.Length - ".processing".Length);
+                    var quarantinePath = Path.Combine(unconfirmedDir,
+                        $"{Path.GetFileNameWithoutExtension(originalPath)}_{DateTime.Now:yyyyMMdd_HHmmss}.json");
                     try
                     {
-                        File.Move(processingPath, originalPath);
-                        _logger.Warn($"Recovered orphaned processing file from a previous run: {processingPath} -> {originalPath}");
+                        File.Move(processingPath, quarantinePath);
                     }
                     catch (Exception ex)
                     {
-                        _logger.Error(ex, $"Failed to recover orphaned processing file: {processingPath}");
+                        _logger.Error(ex, $"Failed to quarantine interrupted receipt file: {processingPath}");
+                        continue;
                     }
+
+                    _logger.Error($"Receipt request '{Path.GetFileName(originalPath)}' was being processed when the service stopped. " +
+                        $"It may or may not have been printed, so it was NOT resent. Moved to '{quarantinePath}' - check the fiscal device and resend manually if needed.");
+
+                    // If the service died after writing the response but before deleting the request,
+                    // the POS already has the real result; don't overwrite it.
+                    if (File.Exists(GetResponseFilePath(originalPath)))
+                    {
+                        _logger.Info($"A response for '{Path.GetFileName(originalPath)}' already exists; leaving it in place.");
+                        continue;
+                    }
+
+                    var response = new ResponseJson
+                    {
+                        ErrorCode = 557,
+                        ErrorMessage = "Receipt processing was interrupted by a service restart. The receipt may or may not have been printed - check the fiscal device before resending."
+                    };
+                    string responseJsonString;
+                    using (await _comManager.AcquireDeviceLockAsync())
+                    {
+                        responseJsonString = SerializeResponse(response);
+                    }
+                    await WriteResponseFile(originalPath, responseJsonString);
                 }
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "An error occurred while recovering orphaned processing files.");
+                _logger.Error(ex, "An error occurred while handling interrupted receipt files.");
             }
         }
 
@@ -153,6 +185,9 @@ namespace empifisJsonAPI2
                 return;
             }
 
+            // One device operation at a time; held through the Radison fiscal-info reads below.
+            using var deviceLock = await _comManager.AcquireDeviceLockAsync();
+
             ResponseJson jsonResponse = new ResponseJson();
             try
             {
@@ -177,45 +212,7 @@ namespace empifisJsonAPI2
                 jsonResponse.ErrorMessage = ex.Message;
             }
 
-            // Conditionally create and serialize the response based on the configuration
-            var jsonSerializerSettings = new JsonSerializerSettings
-            {
-                NullValueHandling = NullValueHandling.Ignore,
-                Formatting = Formatting.Indented
-            };
-            string responseJsonString;
-
-            if (_config.servicePort.radison_error?.ToLower() == "on")
-            {
-                _logger.Info("Radison error mode is ON. Creating ResponseJsonRadison.");
-                var jsonResponseRadison = new ResponseJsonRadison
-                {
-                    ErrorCode = jsonResponse.ErrorCode,
-                    ErrorMessage = jsonResponse.ErrorMessage
-                };
-
-                // Get Fiscal Info for CashRegisterNo
-                var fiscalInfoCashRegister = _comManager.GetFiscalInfo(3);
-                jsonResponseRadison.CashRegisterNo = fiscalInfoCashRegister.message;
-
-                // Get Fiscal Info for ReceiptNo
-                var fiscalInfoReceiptNo = _comManager.GetFiscalInfo(2);
-                if (int.TryParse(fiscalInfoReceiptNo.message, out int recNo))
-                {
-                    jsonResponseRadison.ReceiptNo = (recNo - 1).ToString();
-                }
-                else
-                {
-                    _logger.Warn($"Could not parse ReceiptNo from COM object: '{fiscalInfoReceiptNo.message}'");
-                    jsonResponseRadison.ReceiptNo = "N/A";
-                }
-
-                responseJsonString = JsonConvert.SerializeObject(jsonResponseRadison, jsonSerializerSettings);
-            }
-            else
-            {
-                responseJsonString = JsonConvert.SerializeObject(jsonResponse, jsonSerializerSettings);
-            }
+            string responseJsonString = SerializeResponse(jsonResponse);
 
             _logger.Info($"Response for file '{Path.GetFileName(originalFilePath)}':\n{responseJsonString}");
             await WriteResponseFile(originalFilePath, responseJsonString);
@@ -232,43 +229,97 @@ namespace empifisJsonAPI2
             }
         }
 
+        // Builds the response file content; in Radison mode this reads fiscal info from the device,
+        // so the caller must hold the device lock.
+        private string SerializeResponse(ResponseJson jsonResponse)
+        {
+            var jsonSerializerSettings = new JsonSerializerSettings
+            {
+                NullValueHandling = NullValueHandling.Ignore,
+                Formatting = Formatting.Indented
+            };
+
+            if (_config.servicePort.radison_error?.ToLower() != "on")
+            {
+                return JsonConvert.SerializeObject(jsonResponse, jsonSerializerSettings);
+            }
+
+            _logger.Info("Radison error mode is ON. Creating ResponseJsonRadison.");
+            var jsonResponseRadison = new ResponseJsonRadison
+            {
+                ErrorCode = jsonResponse.ErrorCode,
+                ErrorMessage = jsonResponse.ErrorMessage
+            };
+
+            // Get Fiscal Info for CashRegisterNo
+            var fiscalInfoCashRegister = _comManager.GetFiscalInfo(3);
+            jsonResponseRadison.CashRegisterNo = fiscalInfoCashRegister.message;
+
+            // Get Fiscal Info for ReceiptNo
+            var fiscalInfoReceiptNo = _comManager.GetFiscalInfo(2);
+            if (int.TryParse(fiscalInfoReceiptNo.message, out int recNo))
+            {
+                jsonResponseRadison.ReceiptNo = (recNo - 1).ToString();
+            }
+            else
+            {
+                _logger.Warn($"Could not parse ReceiptNo from COM object: '{fiscalInfoReceiptNo.message}'");
+                jsonResponseRadison.ReceiptNo = "N/A";
+            }
+
+            return JsonConvert.SerializeObject(jsonResponseRadison, jsonSerializerSettings);
+        }
+
+        // inReceipt123.json -> <OutFilePath>\outReceipt123.json
+        private string GetResponseFilePath(string originalFilePath)
+        {
+            string originalFileName = Path.GetFileName(originalFilePath);
+            string newFileName = originalFileName.StartsWith("in", StringComparison.OrdinalIgnoreCase)
+                ? "out" + originalFileName.Substring(2)
+                : originalFileName;
+            return Path.Combine(_config.JsonPathConfig.OutFilePath, newFileName);
+        }
+
         private async Task WriteResponseFile(string originalFilePath, string responseJsonString)
         {
             try
             {
-                if (Directory.Exists(_config.JsonPathConfig.OutFilePath))
-                {
-                    var existingFiles = Directory.EnumerateFiles(_config.JsonPathConfig.OutFilePath);
-                    foreach (var file in existingFiles)
-                    {
-                        File.Delete(file);
-                    }
-                }
-                else
-                {
-                    Directory.CreateDirectory(_config.JsonPathConfig.OutFilePath);
-                }
+                Directory.CreateDirectory(_config.JsonPathConfig.OutFilePath);
+                DeleteUncollectedResponseFiles();
 
-                string originalFileName = Path.GetFileName(originalFilePath);
-                string newFileName;
+                string newFilePath = GetResponseFilePath(originalFilePath);
 
-                if (originalFileName.StartsWith("in", StringComparison.OrdinalIgnoreCase))
-                {
-                    newFileName = "out" + originalFileName.Substring(2);
-                }
-                else
-                {
-                    newFileName = originalFileName;
-                }
-
-                string newFilePath = Path.Combine(_config.JsonPathConfig.OutFilePath, newFileName);
-
-                await File.WriteAllTextAsync(newFilePath, responseJsonString);
+                // Write under a temporary name and rename, so the POS never reads a half-written file.
+                string tempFilePath = newFilePath + ".tmp";
+                await File.WriteAllTextAsync(tempFilePath, responseJsonString);
+                File.Move(tempFilePath, newFilePath, overwrite: true);
                 _logger.Info($"Response written to file: {newFilePath}");
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, "Failed to write response file.");
+            }
+        }
+
+        // Responses stay in the out folder until the POS collects them. Only files nobody has
+        // picked up for a day are cleared, so the folder can't grow without limit.
+        private void DeleteUncollectedResponseFiles()
+        {
+            var cutoff = DateTime.Now.AddDays(-1);
+            foreach (var file in Directory.EnumerateFiles(_config.JsonPathConfig.OutFilePath))
+            {
+                try
+                {
+                    if (File.GetLastWriteTime(file) < cutoff)
+                    {
+                        File.Delete(file);
+                        _logger.Info($"Deleted uncollected response file older than a day: {file}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warn(ex, $"Failed to delete old response file: {file}");
+                }
             }
         }
     }

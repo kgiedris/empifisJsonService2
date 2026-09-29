@@ -19,6 +19,8 @@ namespace empifisJsonAPI2
     private bool _suppressAutoInit = false;
     // Prevent concurrent reloads
     private readonly object _reloadLock = new object();
+    // Serializes whole device operations (a full receipt or one /fiscalCommand) across HTTP and file-watcher callers.
+    private readonly SemaphoreSlim _deviceLock = new SemaphoreSlim(1, 1);
 
         public EmpifisComManager(IOptions<AppConfig> config)
         {
@@ -391,6 +393,24 @@ namespace empifisJsonAPI2
         /// Returns true if the COM object is currently loaded.
         /// </summary>
         public bool IsLoaded() => _comObject != null;
+
+        /// <summary>
+        /// Waits for exclusive use of the fiscal device; dispose the result to release it.
+        /// Hold it for a whole receipt so concurrent requests can't interleave their COM calls.
+        /// Not reentrant: acquire it only at entry points, never inside ReceiptProcessor.
+        /// </summary>
+        public async Task<IDisposable> AcquireDeviceLockAsync()
+        {
+            await _deviceLock.WaitAsync();
+            return new DeviceLockReleaser(_deviceLock);
+        }
+
+        private sealed class DeviceLockReleaser : IDisposable
+        {
+            private SemaphoreSlim? _semaphore;
+            public DeviceLockReleaser(SemaphoreSlim semaphore) => _semaphore = semaphore;
+            public void Dispose() => Interlocked.Exchange(ref _semaphore, null)?.Release();
+        }
 
         public void Dispose()
         {

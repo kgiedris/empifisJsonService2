@@ -29,6 +29,9 @@ namespace empifisJsonAPI2
 
                 _logger.Info($"Received JSON request to /fiscalCommand:\n{jsonString}");
 
+                // One device operation at a time; held through the Radison fiscal-info reads below.
+                using var deviceLock = await comManager.AcquireDeviceLockAsync();
+
                 try
                 {
                     var jsonCommand = JsonConvert.DeserializeObject<fiscalCommand>(jsonString);
@@ -617,6 +620,9 @@ namespace empifisJsonAPI2
                 _logger.Info($"Received JSON request to /fullReceipt:\n{jsonString}");
 
                 var jsonReceipt = JsonConvert.DeserializeObject<ReceiptJson>(jsonString);
+
+                // One device operation at a time; held through the Radison fiscal-info reads below.
+                using var deviceLock = await app.Services.GetRequiredService<EmpifisComManager>().AcquireDeviceLockAsync();
 
                 try
                 {

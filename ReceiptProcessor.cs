@@ -27,6 +27,11 @@ namespace empifisJsonAPI2
             int errorCode = 0;
             string message = "";
 
+            // For receipts that must never print twice, remember the device's next receipt number so a
+            // failure (especially a COM timeout) can be checked against what the device actually did.
+            string receiptType = jsonReceipt.ReceiptType.ToLower();
+            long? receiptNoBefore = receiptType == "fiscal" || receiptType == "return" ? ReadNextReceiptNo() : null;
+
             try
             {
                 switch (jsonReceipt.ReceiptType.ToLower())
@@ -87,6 +92,15 @@ namespace empifisJsonAPI2
                 message = ex.Message; // Captures exception message
             }
 
+            // The device may have completed the receipt even though we got an error (e.g. the final
+            // End* call timed out but the printer finished). If its receipt counter moved, the receipt
+            // exists: report success and don't reset, otherwise the POS retries and prints a duplicate.
+            if (errorCode != 0 && receiptNoBefore.HasValue && ReadNextReceiptNo() is long receiptNoAfter && receiptNoAfter > receiptNoBefore.Value)
+            {
+                _logger.Warn($"Receipt reported error {errorCode} ('{message}') but the device's next receipt number moved from {receiptNoBefore} to {receiptNoAfter}. Treating the receipt as completed.");
+                return (0, "Success");
+            }
+
             // Final checks before returning the standard receipt result
             if (errorCode != 0)
             {
@@ -94,7 +108,9 @@ namespace empifisJsonAPI2
                 // If message is empty (i.e., not set by the catch block), provide a generic error
                 if (string.IsNullOrEmpty(message))
                 {
-                    message = "Error during receipt processing.";
+                    message = errorCode == 555 || errorCode == 556
+                        ? "The fiscal device did not respond in time. The receipt may still have been printed - check the device before resending."
+                        : "Error during receipt processing.";
                 }
             }
             else if (string.IsNullOrEmpty(message))
@@ -104,6 +120,13 @@ namespace empifisJsonAPI2
             }
 
             return (errorCode, message);
+        }
+
+        // GetFiscalInfo type 2 = "Total number of next receipt (document)". Null if it can't be read.
+        private long? ReadNextReceiptNo()
+        {
+            var (code, info) = _comManager.GetFiscalInfo(2);
+            return code == 0 && long.TryParse(info?.Trim(), out var receiptNo) ? receiptNo : null;
         }
 
         private int ProcessFiscalReceipt(FiscalReceipt fiscalReceipt, ReceiptJson jsonReceipt)
