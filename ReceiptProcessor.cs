@@ -514,17 +514,17 @@ namespace empifisJsonAPI2
                 }
             }
 
-            if (returnReceipt.RefundReceiptInfo != null)
+            // The manual names this object RefundReceiptInfo in the example and ReturnReceiptInfo in the
+            // table; accept either, but send it to the device only once.
+            if (returnReceipt.RefundReceiptInfo != null && returnReceipt.ReturnReceiptInfo != null)
             {
-                errorCode = _comManager.RefundReceiptInfo(returnReceipt.RefundReceiptInfo.ECR, returnReceipt.RefundReceiptInfo.ReceiptNo, returnReceipt.RefundReceiptInfo.DocNo);
-                _logger.Debug($"Called RefundReceiptInfo with params ('{returnReceipt.RefundReceiptInfo.ECR}', '{returnReceipt.RefundReceiptInfo.ReceiptNo}', '{returnReceipt.RefundReceiptInfo.DocNo}'). Response: {errorCode}");
-                if (errorCode != 0) return errorCode;
+                _logger.Warn("Both RefundReceiptInfo and ReturnReceiptInfo were given; using RefundReceiptInfo.");
             }
-
-            if (returnReceipt.ReturnReceiptInfo != null)
+            RefundReceiptInfo? refundInfo = returnReceipt.RefundReceiptInfo ?? returnReceipt.ReturnReceiptInfo;
+            if (refundInfo != null)
             {
-                errorCode = _comManager.RefundReceiptInfo(returnReceipt.ReturnReceiptInfo.ECR, returnReceipt.ReturnReceiptInfo.ReceiptNo, returnReceipt.ReturnReceiptInfo.DocNo);
-                _logger.Debug($"Called RefundReceiptInfo with params ('{returnReceipt.ReturnReceiptInfo.ECR}', '{returnReceipt.ReturnReceiptInfo.ReceiptNo}', '{returnReceipt.ReturnReceiptInfo.DocNo}'). Response: {errorCode}");
+                errorCode = _comManager.RefundReceiptInfo(refundInfo.ECR, refundInfo.ReceiptNo, refundInfo.DocumentNumber);
+                _logger.Debug($"Called RefundReceiptInfo with params ('{refundInfo.ECR}', '{refundInfo.ReceiptNo}', '{refundInfo.DocumentNumber}'). Response: {errorCode}");
                 if (errorCode != 0) return errorCode;
             }
 

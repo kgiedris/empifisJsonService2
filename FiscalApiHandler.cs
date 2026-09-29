@@ -34,7 +34,7 @@ namespace empifisJsonAPI2
 
                 try
                 {
-                    var jsonCommand = JsonConvert.DeserializeObject<fiscalCommand>(jsonString);
+                    var jsonCommand = JsonInput.Deserialize<fiscalCommand>(jsonString, "/fiscalCommand");
 
                     if (jsonCommand?.Command == null)
                     {
@@ -412,7 +412,7 @@ namespace empifisJsonAPI2
                             case "refundreceiptinfo":
                                 if (jsonCommand.RefundReceiptInfo != null)
                                 {
-                                    jsonResponse.ErrorCode = comManager.RefundReceiptInfo(jsonCommand.RefundReceiptInfo.ECR, jsonCommand.RefundReceiptInfo.ReceiptNo, jsonCommand.RefundReceiptInfo.DocNo);
+                                    jsonResponse.ErrorCode = comManager.RefundReceiptInfo(jsonCommand.RefundReceiptInfo.ECR, jsonCommand.RefundReceiptInfo.ReceiptNo, jsonCommand.RefundReceiptInfo.DocumentNumber);
                                 }
                                 else
                                 {
@@ -619,13 +619,12 @@ namespace empifisJsonAPI2
 
                 _logger.Info($"Received JSON request to /fullReceipt:\n{jsonString}");
 
-                var jsonReceipt = JsonConvert.DeserializeObject<ReceiptJson>(jsonString);
-
                 // One device operation at a time; held through the Radison fiscal-info reads below.
                 using var deviceLock = await app.Services.GetRequiredService<EmpifisComManager>().AcquireDeviceLockAsync();
 
                 try
                 {
+                    var jsonReceipt = JsonInput.Deserialize<ReceiptJson>(jsonString, "/fullReceipt");
                     if (jsonReceipt?.ReceiptType == null)
                     {
                         jsonResponse.ErrorCode = 999;

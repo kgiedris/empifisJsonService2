@@ -225,9 +225,11 @@ app.Use(async (context, next) =>
 
 app.MapFiscalEndpoints();
 
-// Diagnostic endpoint: test PrintX, Unload COM, verify error, Load COM, PrintX again
-app.MapGet("/diag/test-printx-unload-reload", (EmpifisComManager comManager) =>
+// Diagnostic endpoint: test PrintX, Unload COM, verify error, Load COM, PrintX again.
+// POST only: it prints three X reports, so a browser visit or link preview must not trigger it.
+app.MapPost("/diag/test-printx-unload-reload", async (EmpifisComManager comManager) =>
 {
+    using var deviceLock = await comManager.AcquireDeviceLockAsync();
     var results = new Dictionary<string, object?>();
 
     logger.Info("Starting diagnostic: PrintX -> Unload -> PrintX -> Load -> PrintX");
@@ -372,8 +374,20 @@ if (Environment.UserInteractive)
             ConsoleHelper.HideConsole();
         };
         var exitItem = new ToolStripMenuItem("Exit");
-        exitItem.Click += (s, e) =>
+        exitItem.Click += async (s, e) =>
         {
+            exitItem.Enabled = false;
+            // Stop the host first so an in-flight receipt (HTTP request or file) finishes
+            // instead of being cut off halfway through printing.
+            try
+            {
+                logger.Info("Exit requested from tray. Stopping the service...");
+                await app.StopAsync();
+            }
+            catch (Exception ex)
+            {
+                logger.Warn(ex, "Error while stopping the host on exit.");
+            }
             notifyIcon.Visible = false;
             notifyIcon.Dispose();
             NLog.LogManager.Flush(TimeSpan.FromSeconds(2));

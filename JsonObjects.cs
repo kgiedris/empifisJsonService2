@@ -303,13 +303,15 @@ namespace empifisJsonAPI2.JsonObjects
         public string ECR { get; set; }
         public string ReceiptNo { get; set; }
         public string DocNo { get; set; }
+        // The manual's table names this field "DocumentNo"; accept it as an alias for DocNo.
+        public string? DocumentNo { get; set; }
+
+        public string DocumentNumber => DocNo ?? DocumentNo ?? string.Empty;
     }
 
-    public class ReturnReceiptInfo
+    // Same fields; the manual documents the return-receipt object under both names.
+    public class ReturnReceiptInfo : RefundReceiptInfo
     {
-        public string ECR { get; set; }
-        public string ReceiptNo { get; set; }
-        public string DocNo { get; set; }
     }
 
     public class PrintDepositRefund
@@ -704,5 +706,40 @@ namespace empifisJsonAPI2.JsonObjects
         public string InFileArchivePath { get; set; }
         public string OutFilePath { get; set; }
         public string OutFileArchivePath { get; set; }
+    }
+
+    public static class JsonInput
+    {
+        private static readonly NLog.ILogger _logger = NLog.LogManager.GetCurrentClassLogger();
+
+        /// <summary>
+        /// Deserializes an incoming request. Fields the model doesn't know (usually a misspelled
+        /// name, e.g. "depositReceiveDescription" instead of "depositReceiveDesc") are skipped as
+        /// before, but logged as a warning so the silently lost value is visible.
+        /// </summary>
+        public static T? Deserialize<T>(string json, string source)
+        {
+            var unknownFields = new List<string>();
+            var settings = new Newtonsoft.Json.JsonSerializerSettings
+            {
+                MissingMemberHandling = Newtonsoft.Json.MissingMemberHandling.Error,
+                Error = (sender, args) =>
+                {
+                    // Only unknown members are tolerated; type/format errors still fail the request.
+                    if (args.ErrorContext.Error.Message.StartsWith("Could not find member"))
+                    {
+                        unknownFields.Add(args.ErrorContext.Path);
+                        args.ErrorContext.Handled = true;
+                    }
+                }
+            };
+
+            var result = Newtonsoft.Json.JsonConvert.DeserializeObject<T>(json, settings);
+            if (unknownFields.Count > 0)
+            {
+                _logger.Warn($"{source}: ignored unknown JSON field(s): {string.Join(", ", unknownFields)}");
+            }
+            return result;
+        }
     }
 }

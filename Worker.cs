@@ -191,7 +191,7 @@ namespace empifisJsonAPI2
             ResponseJson jsonResponse = new ResponseJson();
             try
             {
-                var jsonReceipt = JsonConvert.DeserializeObject<ReceiptJson>(jsonContent);
+                var jsonReceipt = JsonInput.Deserialize<ReceiptJson>(jsonContent, Path.GetFileName(originalFilePath));
                 if (jsonReceipt == null)
                 {
                     jsonResponse.ErrorCode = 999;
