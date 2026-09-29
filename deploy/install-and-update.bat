@@ -81,6 +81,8 @@ echo.
 echo Checking for existing service "%SERVICE_NAME%"...
 sc query "%SERVICE_NAME%" >nul
 if %errorlevel% equ 0 (
+    rem Keep an existing automatic start (a till needs it); only new installs get START_TYPE.
+    sc qc "%SERVICE_NAME%" | find "AUTO_START" >nul && set "START_TYPE=auto"
     echo Service found. Stopping and deleting it...
     sc stop "%SERVICE_NAME%" >nul
     sc delete "%SERVICE_NAME%"

@@ -3,6 +3,10 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/master/VisualStudio.gitignore
 
+# Installer build output (installer\build-installer.ps1)
+installer/output/
+installer/build/
+
 # User-specific files
 *.rsuser
 *.suo

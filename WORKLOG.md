@@ -13,7 +13,8 @@ Windows service that accepts receipts as JSON (HTTP on port 5006: `/fullReceipt`
 | Config | `C:\Altera\EmpifisJsonAPI\config.json` (port, file_mode, radison_error, com_timeout_seconds = 60, paths, Cors) |
 | Log | `C:\Altera\Log\json2.log`, daily archive `C:\Altera\Log\Archive\json2_YYYY-MM-DD.log`, kept 10 days |
 | EmpiFisX | `C:\Altera\VersionX\EmpiFisX.dll`, **32-bit**, apartment-threaded, registered only for 32-bit programs → the service must stay x86 |
-| Manual | `empifisJSON_2_3_1.docx` (tracked changes against 2.1.7, not yet accepted) |
+| Manual | `empifisJSON.docx`, published as `empifisJSON_<version>.docx` (tracked changes against 2.1.7, not yet accepted) |
+| Installer | `installer\build-installer.ps1` → `installer\output\EmpifisJsonSetup-<version>.exe` (service + optional ReceiptTester) |
 
 ## Build, test, release, deploy
 
@@ -64,7 +65,7 @@ Windows service that accepts receipts as JSON (HTTP on port 5006: `/fullReceipt`
 
 ## Plan / open items
 
-1. **Installer (Inno Setup 7, `C:\Program Files\Inno Setup 7`)** – next step. Requirements agreed with the user:
+1. **Installer – done 2026-09-29** (`installer\`): `.\installer\build-installer.ps1` publishes the service and ReceiptTester (`C:\ReceiptTester`) and compiles `EmpifisSetup.iss` with Inno Setup 7 into `installer\output\EmpifisJsonSetup-<version>.exe` (~88 MB). Tested on this PC (update of an unzipped install, twice): config.json kept, start type kept, old files removed, folders/permissions/firewall rule, uninstall entry, Start menu shortcuts, service starts. Not tested: a truly fresh PC (Windows Sandbox is disabled here) and uninstall. Decisions: autostart checkbox **off** by default (new installs only; updates keep the existing start type), "start now" off, firewall rule on; default config.json = this PC's (`installer\config.default.json`). The manual is `empifisJSON.docx` in the repo and is published as `empifisJSON_<version>.docx`. Original requirements:
    - Service (always) → `C:\Altera\EmpifisJsonAPI` from the Till publish output, including the latest manual (`empifisJSON_*.docx`) in the same folder.
    - **ReceiptTester → `C:\Altera\ReceiptTester` as an optional component, unticked by default** (it can print Z reports / fiscal receipts on a customer's live till). Source: `publish/win-x86/ReceiptTester.exe` from the ReceiptTester repo.
    - Create `C:\Altera\Log` and `C:\Altera\Log\Archive` if missing; give normal users write access to the log folder (ReceiptTester logs there too).
@@ -72,7 +73,9 @@ Windows service that accepts receipts as JSON (HTTP on port 5006: `/fullReceipt`
    - Keep an existing `config.json`; install a default one only if missing.
    - **Must also update PCs where the service was just unzipped (no installer):** stop the running `empifisJsonAPI2Service` before copying, remove leftovers of older framework-dependent builds (`Interop.Empirija.dll`, `web.config`, `runtimes\`, old docx), recreate the service like `install-and-update.bat` (manual start, restart-on-failure, EmpiFisX 32-bit registration check with a clear message).
 2. ~~ReceiptTester review~~ **done 2026-09-29** (v0.4 on master and v0.3, commit 81cf8bc): .NET 10, single-file 32-bit exe, fixed non-fiscal deposit field names (the old ErrorCode 23), Log Repeater number parsing on Lithuanian Windows, `ItemUnit`, Stop between receipts, log location, Z-report confirmations, config port, ReloadEmpiFis button, 27 tests. Device finding: **Tare Deposit / Tare Deposit Void are rejected inside a non-fiscal receipt (ErrorCode 18, ERR_NONFIS_STATE)** – the manual still lists them under non-fiscal receipts; correct it once it's known whether they work in fiscal receipts (untested).
-3. Pilot 2.3.1 at the customer where EmpiFis got stuck; afterwards check `json2.log`/archives for "was slow", "timed out", "Ending the process", and the Windows Application log.
+   **Config risks on a new PC** (told the user): POS HTTP timeout must be longer than `com_timeout_seconds` (60) + ~10 s reload, or the POS may give up and resend; Radison customers need `radison_error: on` (default off); a browser-based POS needs `Cors.AllowedOrigins` (not in the default config); another program on port 5006 or the old v1 `empifisJson` service (same port and folders) blocks it – the installer warns about the latter; POS on another PC needs the firewall rule.
+   Possible next: build the installer in the release workflow too (needs Inno Setup on the runner and the ReceiptTester repo).
+3. Pilot 2.3.2 at the customer where EmpiFis got stuck; afterwards check `json2.log`/archives for "was slow", "timed out", "Ending the process", and the Windows Application log.
 4. Have the manual's tracked changes accepted in Word and the table of contents updated.
 5. Tell POS integrators: don't resend automatically on 555/556/557.
 6. Check that GitHub accepted the Dependabot config; merge its update PRs (actions/checkout and setup-dotnet v4 use a retiring Node.js).

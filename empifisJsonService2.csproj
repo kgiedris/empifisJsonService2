@@ -19,6 +19,8 @@
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <!-- A small single-device service: workstation GC uses far less memory on a till than server GC. -->
     <ServerGarbageCollection>false</ServerGarbageCollection>
+    <!-- No web.config on publish: it is only for hosting in IIS, and this runs as a Windows service. -->
+    <IsTransformWebConfigDisabled>true</IsTransformWebConfigDisabled>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Empirija">
@@ -35,11 +37,11 @@
     <PackageReference Include="NLog.Extensions.Logging" Version="6.0.3" />
   </ItemGroup>
   <ItemGroup>
-    <!-- The test project lives under tests\; keep its sources and build output out of this project. -->
-    <Compile Remove="tests\**" />
-    <Content Remove="tests\**" />
-    <None Remove="tests\**" />
-    <EmbeddedResource Remove="tests\**" />
+    <!-- The test project (tests\) and the installer sources (installer\) are not part of the service. -->
+    <Compile Remove="tests\**;installer\**" />
+    <Content Remove="tests\**;installer\**" />
+    <None Remove="tests\**;installer\**" />
+    <EmbeddedResource Remove="tests\**;installer\**" />
   </ItemGroup>
   <ItemGroup>
     <Content Update="nlog.config">
@@ -48,8 +50,10 @@
     <Content Include="empirija-logo.png" Condition="Exists('empirija-logo.png')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <!-- Install package extras: the service scripts and the manual go next to the exe on publish. -->
+    <!-- Install package extras: the service scripts and the manual go next to the exe on publish.
+         The manual is published as empifisJSON_<version>.docx (e.g. empifisJSON_2_3_2.docx), so its name
+         always matches the service version; in the repo it is plain empifisJSON.docx. -->
     <None Update="deploy\*.bat" Link="%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" />
-    <None Update="empifisJSON_*.docx" CopyToPublishDirectory="PreserveNewest" />
+    <None Update="empifisJSON.docx" Link="empifisJSON_$(Version.Replace('.', '_')).docx" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
