@@ -62,11 +62,21 @@ namespace empifisJsonAPI2
                 {
                     // Capture full exception (message + stack) for diagnostics and log it.
                     _lastInitException = ex;
-                    _logger.Error(ex, "Failed to load the Empirija COM object.");
+                    _logger.Error(ex, "Failed to load the Empirija COM object." + ComLoadHint(ex));
                     _comObject = null;
                 }
             }
         }
+
+        // The usual reasons EmpiFisX can't be created on a new till, spelled out for whoever reads the log.
+        private static string ComLoadHint(Exception ex) => ex.HResult switch
+        {
+            unchecked((int)0x80040154) => " EmpiFisX is not registered for 32-bit programs (REGDB_E_CLASSNOTREG): install EmpiFis, " +
+                "or register it with %windir%\\SysWOW64\\regsvr32.exe \"C:\\Altera\\VersionX\\EmpiFisX.dll\".",
+            unchecked((int)0x8007007E) => " EmpiFisX.dll or a DLL it depends on was not found: check the path EmpiFisX is registered with.",
+            unchecked((int)0x800700C1) => " EmpiFisX.dll does not match the bitness of this process (it must be the 32-bit DLL).",
+            _ => "",
+        };
 
         private bool EnsureComObject(string methodName)
         {

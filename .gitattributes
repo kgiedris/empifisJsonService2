@@ -3,6 +3,9 @@
 ###############################################################################
 * text=auto
 
+# Batch files need CRLF line endings for cmd.exe labels and goto to work reliably.
+*.bat text eol=crlf
+
 ###############################################################################
 # Set default behavior for command prompt diff.
 #
