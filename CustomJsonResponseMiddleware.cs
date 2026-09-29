@@ -22,7 +22,16 @@ namespace empifisJsonAPI2
             await using var memory = new MemoryStream();
             context.Response.Body = memory;
 
-            await _next(context);
+            try
+            {
+                await _next(context);
+            }
+            catch
+            {
+                // Put the real response stream back so the server can still send its error response.
+                context.Response.Body = originalBody;
+                throw;
+            }
 
             memory.Seek(0, SeekOrigin.Begin);
             var responseBody = await new StreamReader(memory, Encoding.UTF8).ReadToEndAsync();

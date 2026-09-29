@@ -151,6 +151,22 @@ builder.WebHost.ConfigureKestrel(serverOptions =>
 
 var app = builder.Build();
 
+// Record start, stop and crashes in json2.log (the framework's own lifetime messages are filtered out
+// by nlog.config), so it's always possible to tell when and how the service stopped.
+string runMode = Microsoft.Extensions.Hosting.WindowsServices.WindowsServiceHelpers.IsWindowsService() ? "Windows service" : "interactive (tray)";
+app.Lifetime.ApplicationStarted.Register(() => logger.Info($"empifisJsonService2 {appVersion} started as {runMode}, listening on port {port}."));
+app.Lifetime.ApplicationStopping.Register(() => logger.Info($"empifisJsonService2 is stopping (stop requested: {(runMode == "Windows service" ? "Windows service stop" : "tray Exit or console close")})."));
+app.Lifetime.ApplicationStopped.Register(() =>
+{
+    logger.Info("empifisJsonService2 stopped.");
+    NLog.LogManager.Flush(TimeSpan.FromSeconds(2));
+});
+AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+{
+    logger.Fatal(e.ExceptionObject as Exception, "Unhandled exception; the process is terminating.");
+    NLog.LogManager.Flush(TimeSpan.FromSeconds(2));
+};
+
 // Use custom JSON response middleware to normalize \uXXXX escaping
 app.UseMiddleware<CustomJsonResponseMiddleware>();
 
