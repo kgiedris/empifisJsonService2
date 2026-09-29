@@ -13,7 +13,7 @@ Windows service that accepts receipts as JSON (HTTP on port 5006: `/fullReceipt`
 | Config | `C:\Altera\EmpifisJsonAPI\config.json` (port, file_mode, radison_error, com_timeout_seconds = 60, paths, Cors) |
 | Log | `C:\Altera\Log\json2.log`, daily archive `C:\Altera\Log\Archive\json2_YYYY-MM-DD.log`, kept 10 days |
 | EmpiFisX | `C:\Altera\VersionX\EmpiFisX.dll`, **32-bit**, apartment-threaded, registered only for 32-bit programs → the service must stay x86 |
-| Manual | `empifisJSON.docx`, published as `empifisJSON_<version>.docx` (tracked changes against 2.1.7, not yet accepted) |
+| Manual | `empifisJSON.docx`, published as `empifisJSON_<version>.docx`. All corrections accepted (2026-09-29, cover says 2.3.2); edit it directly in Word from now on and update the cover version and table of contents when the content changes |
 | Installer | `installer\build-installer.ps1` → `installer\output\EmpifisJsonSetup-<version>.exe` (service + optional ReceiptTester) |
 
 ## Build, test, release, deploy
@@ -76,7 +76,7 @@ Windows service that accepts receipts as JSON (HTTP on port 5006: `/fullReceipt`
    **Config risks on a new PC** (told the user): POS HTTP timeout must be longer than `com_timeout_seconds` (60) + ~10 s reload, or the POS may give up and resend; Radison customers need `radison_error: on` (default off); a browser-based POS needs `Cors.AllowedOrigins` (not in the default config); another program on port 5006 or the old v1 `empifisJson` service (same port and folders) blocks it – the installer warns about the latter; POS on another PC needs the firewall rule.
    Possible next: build the installer in the release workflow too (needs Inno Setup on the runner and the ReceiptTester repo).
 3. Pilot 2.3.2 at the customer where EmpiFis got stuck; afterwards check `json2.log`/archives for "was slow", "timed out", "Ending the process", and the Windows Application log.
-4. Have the manual's tracked changes accepted in Word and the table of contents updated.
+4. ~~Accept the manual's tracked changes~~ – done; `Cors.AllowedOrigins` (empty) added to the default config and to this PC's config.json.
 5. Tell POS integrators: don't resend automatically on 555/556/557.
 6. Check that GitHub accepted the Dependabot config; merge its update PRs (actions/checkout and setup-dotnet v4 use a retiring Node.js).
 7. Optional: replace the installed build in `C:\Altera\EmpifisJsonAPI` (same code, label `+c09e035`) with the release zip (`+38efed6`).

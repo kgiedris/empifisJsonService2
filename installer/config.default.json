@@ -8,5 +8,8 @@
   "JsonPathConfig": {
     "InFilePath": "C:\\Altera\\json\\in\\",
     "OutFilePath": "C:\\Altera\\json\\out\\"
+  },
+  "Cors": {
+    "AllowedOrigins": ""
   }
 }
