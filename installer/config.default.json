@@ -10,6 +10,6 @@
     "OutFilePath": "C:\\Altera\\json\\out\\"
   },
   "Cors": {
-    "AllowedOrigins": ""
+    "AllowedOrigins": "*"
   }
 }

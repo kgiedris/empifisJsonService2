@@ -193,6 +193,13 @@ app.Use(async (context, next) =>
             context.Response.Headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS";
             context.Response.Headers["Access-Control-Allow-Headers"] = "Content-Type";
             context.Response.Headers["Access-Control-Max-Age"] = "3600";
+
+            // Chrome's Private Network Access: a page from a public site calling a local/private address
+            // sends "Access-Control-Request-Private-Network: true" in the preflight and needs this reply.
+            if (string.Equals(context.Request.Headers["Access-Control-Request-Private-Network"], "true", StringComparison.OrdinalIgnoreCase))
+            {
+                context.Response.Headers["Access-Control-Allow-Private-Network"] = "true";
+            }
         }
     }
 
