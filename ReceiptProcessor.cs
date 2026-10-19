@@ -90,12 +90,15 @@ namespace empifisJsonAPI2
                 message = ex.Message; // Captures exception message
             }
 
-            // The device may have completed the receipt even though we got an error (e.g. the final
-            // End* call timed out but the printer finished). If its receipt counter moved, the receipt
+            // Only after a COM timeout (555/556) we don't know what the device did: the final End* call may
+            // have timed out although the printer finished. If its receipt counter moved, the receipt
             // exists: report success and don't reset, otherwise the POS retries and prints a duplicate.
-            if (errorCode != 0 && receiptNoBefore.HasValue && ReadNextReceiptNo() is long receiptNoAfter && receiptNoAfter > receiptNoBefore.Value)
+            // Any other non-zero code is the device's own answer and is always returned as is: the receipt
+            // number also moves when the device voids a receipt (e.g. card payment declined, RC=1), but
+            // that receipt was not completed.
+            if ((errorCode == 555 || errorCode == 556) && receiptNoBefore.HasValue && ReadNextReceiptNo() is long receiptNoAfter && receiptNoAfter > receiptNoBefore.Value)
             {
-                _logger.Warn($"Receipt reported error {errorCode} ('{message}') but the device's next receipt number moved from {receiptNoBefore} to {receiptNoAfter}. Treating the receipt as completed.");
+                _logger.Warn($"Receipt timed out ({errorCode}) but the device's next receipt number moved from {receiptNoBefore} to {receiptNoAfter}. Treating the receipt as completed.");
                 return (0, "Success");
             }
 

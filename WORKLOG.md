@@ -1,6 +1,6 @@
 # empifisJsonService2 – work log and plan
 
-Handoff notes so work can continue if a session is lost. Last updated 2026-09-29 (version 2.3.1).
+Handoff notes so work can continue if a session is lost. Last updated 2026-10-19 (version 2.3.6).
 
 ## What the service is
 
@@ -13,21 +13,26 @@ Windows service that accepts receipts as JSON (HTTP on port 5006: `/fullReceipt`
 | Config | `C:\Altera\EmpifisJsonAPI\config.json` (port, file_mode, radison_error, com_timeout_seconds = 60, paths, Cors) |
 | Log | `C:\Altera\Log\json2.log`, daily archive `C:\Altera\Log\Archive\json2_YYYY-MM-DD.log`, kept 10 days |
 | EmpiFisX | `C:\Altera\VersionX\EmpiFisX.dll`, **32-bit**, apartment-threaded, registered only for 32-bit programs → the service must stay x86 |
-| Manual | `empifisJSON.docx`, published as `empifisJSON_<version>.docx`. All corrections accepted (2026-09-29, cover says 2.3.2); edit it directly in Word from now on and update the cover version and table of contents when the content changes |
+| Manual | `empifisJSON.docx`, published as `empifisJSON_<version>.docx`. All corrections accepted (2026-09-29); the cover version is bumped with every release (2.3.6 now); edit it directly in Word from now on and update the cover version and table of contents when the content changes |
 | Installer | `installer\build-installer.ps1` → `installer\output\EmpifisJsonSetup-<version>.exe` (service + optional ReceiptTester) |
 
 ## Build, test, release, deploy
 
-- Build/test: `dotnet build`, `dotnet test tests\empifisJsonService2.Tests` (27 tests, fake fiscal device; needs x86 .NET 10 runtimes, installed on this PC).
+- Build/test: `dotnet build`, `dotnet test tests\empifisJsonService2.Tests` (29 tests, fake fiscal device; needs x86 .NET 10 runtimes, installed on this PC).
 - Till package: `dotnet publish empifisJsonService2.csproj -p:PublishProfile=Till` → `bin\publish\till\` (self-contained win-x86, includes `install-and-update.bat`, `run-service.bat`, the manual).
-- Release: bump `<Version>` in the csproj and the manual's cover version, push, then `gh release create vX.Y.Z --target master`. `.github/workflows/release.yml` tests, builds with the latest .NET 10 SDK and attaches `empifisJsonService2-X.Y.Z-win-x86.zip` and `EmpifisJsonSetup-X.Y.Z.exe` (ReceiptTester from its master branch). Latest: v2.3.4. `build.yml` runs on every push. Dependabot: weekly NuGet, monthly Actions.
+- Release: bump `<Version>` in the csproj and the manual's cover version, push, then `gh release create vX.Y.Z --target master`. `.github/workflows/release.yml` tests, builds with the latest .NET 10 SDK and attaches `empifisJsonService2-X.Y.Z-win-x86.zip` and `EmpifisJsonSetup-X.Y.Z.exe` (ReceiptTester from its master branch). Latest: v2.3.6. `build.yml` runs on every push. Dependabot: weekly NuGet, monthly Actions.
 - Deploy: stop the service, copy the package into `C:\Altera\EmpifisJsonAPI` (keep `config.json`), run `install-and-update.bat` as admin (checks EmpiFisX registration, .NET runtime, config; recreates the service with manual start and restart-on-failure).
+
+## Done after 2.3.1
+
+- **2.3.5 (2026-10-16):** `Access-Control-Allow-Private-Network: true` is answered to Chrome's Private Network Access preflight; the installer's default `config.json` has `Cors.AllowedOrigins` = `*` (the built-in default in `appsettings.json` stays empty).
+- **2.3.6 (2026-10-19):** bug fix – a receipt that the device answered with an error was reported as success. Seen in a customer log: card payment declined (`ECRServer ... ResultCode: 1`), `EndFiscalReceiptEx` returned RC=1, EmpiFis voided the receipt (number 18 used, receipt "PANAIKINTAS") and the next number moved 18 → 19; the duplicate-protection below read that as "receipt printed" and answered 0. Now that protection applies **only after our own COM timeout (555/556)**; every other non-zero code from EmpiFis is returned to the POS as is (and `ResetFiscal` is called). Code 1 has no description in `ErrorCodes.cs` (none known) → message `Error 1.`. Test `ErrorFromTheDeviceOnEnd_EvenWhenTheReceiptNumberMoved_IsReturnedAsTheError`.
 
 ## Done on 2026-09-29 (2.1.7 → 2.3.1, all on master and GitHub)
 
 **Receipts and printing**
 - One device operation at a time (`AcquireDeviceLockAsync`) across HTTP and file mode, including the Radison receipt-number reads.
-- Duplicate-receipt protection: fiscal/return receipts read the next receipt number (GetFiscalInfo 2) before; on an error or timeout, if it moved, the receipt printed → answer 0 and don't reset.
+- Duplicate-receipt protection: fiscal/return receipts read the next receipt number (GetFiscalInfo 2) before; on a COM timeout (555/556), if it moved, the receipt printed → answer 0 and don't reset (since 2.3.6 only for timeouts, not for errors returned by the device).
 - File mode: interrupted `.processing` files are quarantined to `in\unconfirmed` with response code **557** instead of being reprinted; the out folder is no longer wiped (responses older than a day are deleted); responses written via `.tmp` + rename.
 - Return receipts: refund info sent once; `RefundReceiptInfo`/`ReturnReceiptInfo` and `DocNo`/`DocumentNo` both accepted.
 - Unknown JSON fields are logged as warnings (misspelled names were silently dropped).
@@ -57,6 +62,7 @@ Windows service that accepts receipts as JSON (HTTP on port 5006: `/fullReceipt`
 - Service start type is manual.
 - No `/status` endpoint, no input pre-validation.
 - No automatic reload on EmpiFis error codes (500/501/520…) without evidence.
+- Any non-zero code returned by EmpiFis is always passed to the POS, even if the receipt number moved (a voided receipt uses its number).
 
 ## Tested / not tested
 
@@ -73,7 +79,7 @@ Windows service that accepts receipts as JSON (HTTP on port 5006: `/fullReceipt`
    - Keep an existing `config.json`; install a default one only if missing.
    - **Must also update PCs where the service was just unzipped (no installer):** stop the running `empifisJsonAPI2Service` before copying, remove leftovers of older framework-dependent builds (`Interop.Empirija.dll`, `web.config`, `runtimes\`, old docx), recreate the service like `install-and-update.bat` (manual start, restart-on-failure, EmpiFisX 32-bit registration check with a clear message).
 2. ~~ReceiptTester review~~ **done 2026-09-29** (v0.4 on master and v0.3, commit 81cf8bc): .NET 10, single-file 32-bit exe, fixed non-fiscal deposit field names (the old ErrorCode 23), Log Repeater number parsing on Lithuanian Windows, `ItemUnit`, Stop between receipts, log location, Z-report confirmations, config port, ReloadEmpiFis button, 27 tests. Device finding: **Tare Deposit / Tare Deposit Void work only in fiscal receipts** (a non-fiscal receipt returns ErrorCode 18, ERR_NONFIS_STATE; a fiscal one prints, tested 2026-09-29) – removed from the manual's non-fiscal section, noted in the fiscal table; ReceiptTester 0.6 has them in the fiscal template. ReceiptTester 0.6 also answers ErrorCode 50 (drawer low) in a batch with Money In 50000, and has its own CI (build/test/exe artifact) and Dependabot.
-   **Config risks on a new PC** (told the user): POS HTTP timeout must be longer than `com_timeout_seconds` (60) + ~10 s reload, or the POS may give up and resend; Radison customers need `radison_error: on` (default off); a browser-based POS needs `Cors.AllowedOrigins` (not in the default config); another program on port 5006 or the old v1 `empifisJson` service (same port and folders) blocks it – the installer warns about the latter; POS on another PC needs the firewall rule.
+   **Config risks on a new PC** (told the user): POS HTTP timeout must be longer than `com_timeout_seconds` (60) + ~10 s reload, or the POS may give up and resend; Radison customers need `radison_error: on` (default off); a browser-based POS needs `Cors.AllowedOrigins` (the installer's default config has `*`; the built-in default is empty); another program on port 5006 or the old v1 `empifisJson` service (same port and folders) blocks it – the installer warns about the latter; POS on another PC needs the firewall rule.
    **Releases are fully automatic since 2026-09-29:** publishing a GitHub release makes release.yml test, build and attach both the zip and the installer (secret `RECEIPTTESTER_TOKEN` = fine-grained token, read-only Contents of the private kgiedris/ReceiptTester, set by the user; renew it when it expires or the installer step is skipped and only the zip is attached). "Run workflow" on release.yml builds both as artifacts without a release. Verified: the CI-built 2.3.4 installer installs and runs on this PC.
 3. Pilot 2.3.2 at the customer where EmpiFis got stuck; afterwards check `json2.log`/archives for "was slow", "timed out", "Ending the process", and the Windows Application log.
 4. ~~Accept the manual's tracked changes~~ – done; `Cors.AllowedOrigins` (empty) added to the default config and to this PC's config.json.

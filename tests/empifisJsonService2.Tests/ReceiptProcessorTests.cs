@@ -87,6 +87,20 @@ public class ReceiptProcessorTests
     }
 
     [Fact]
+    public void ErrorFromTheDeviceOnEnd_EvenWhenTheReceiptNumberMoved_IsReturnedAsTheError()
+    {
+        // E.g. the card payment is declined: the device voids the receipt (its number moves) and
+        // EndFiscalReceiptEx returns 1. The receipt was not completed, so the POS must get the error.
+        var device = new FakeFiscalDevice { CompletesDespiteErrorOn = "EndFiscalReceiptEx" }.Returns("EndFiscalReceiptEx", 1);
+
+        var (errorCode, message) = Process(device, FiscalReceipt);
+
+        Assert.Equal(1, errorCode);
+        Assert.NotEqual("Success", message);
+        Assert.Contains("ResetFiscal", device.CallNames);
+    }
+
+    [Fact]
     public void ReturnReceipt_WithBothInfoObjects_SendsRefundInfoOnceAndAcceptsDocumentNo()
     {
         var device = new FakeFiscalDevice();
