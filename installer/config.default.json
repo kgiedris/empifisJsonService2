@@ -2,7 +2,7 @@
   "servicePort": {
     "port": "5006",
     "file_mode": "on",
-    "radison_error": "off",
+    "custom_error": "off",
     "com_timeout_seconds": 60
   },
   "JsonPathConfig": {

@@ -18,7 +18,7 @@ namespace empifisJsonAPI2
         public static void MapFiscalEndpoints(this WebApplication app)
         {
             var config = app.Configuration.Get<AppConfig>();
-            bool isRadisonErrorMode = config?.servicePort?.radison_error?.ToLower() == "on";
+            bool isCustomErrorMode = config?.servicePort?.custom_error?.ToLower() == "on";
 
             // Extract handler to register the same POST route for both /fiscalCommand and //fiscalCommand
             var fiscalHandler = async (HttpContext context, EmpifisComManager comManager) =>
@@ -29,7 +29,7 @@ namespace empifisJsonAPI2
 
                 _logger.Info($"Received JSON request to /fiscalCommand:\n{jsonString}");
 
-                // One device operation at a time; held through the Radison fiscal-info reads below.
+                // One device operation at a time; held through the custom-error fiscal-info reads below.
                 using var deviceLock = await comManager.AcquireDeviceLockAsync();
 
                 try
@@ -572,29 +572,29 @@ namespace empifisJsonAPI2
                 }
 
                 object finalResponse;
-                if (isRadisonErrorMode)
+                if (isCustomErrorMode)
                 {
-                    _logger.Info("Radison error mode is ON. Creating ResponseJsonRadison.");
-                    var radisonResponse = new ResponseJsonRadison
+                    _logger.Info("Custom error mode is ON. Creating ResponseJsonCustom.");
+                    var customResponse = new ResponseJsonCustom
                     {
                         ErrorCode = jsonResponse.ErrorCode,
                         ErrorMessage = jsonResponse.ErrorMessage
                     };
 
                     var fiscalInfoCashRegister = comManager.GetFiscalInfo(3);
-                    radisonResponse.CashRegisterNo = fiscalInfoCashRegister.message;
+                    customResponse.CashRegisterNo = fiscalInfoCashRegister.message;
 
                     var fiscalInfoReceiptNo = comManager.GetFiscalInfo(2);
                     if (int.TryParse(fiscalInfoReceiptNo.message, out int recNo))
                     {
-                        radisonResponse.ReceiptNo = (recNo - 1).ToString();
+                        customResponse.ReceiptNo = (recNo - 1).ToString();
                     }
                     else
                     {
                         _logger.Warn($"Could not parse ReceiptNo from COM object: '{fiscalInfoReceiptNo.message}'");
-                        radisonResponse.ReceiptNo = "N/A";
+                        customResponse.ReceiptNo = "N/A";
                     }
-                    finalResponse = radisonResponse;
+                    finalResponse = customResponse;
                 }
                 else
                 {
@@ -625,7 +625,7 @@ namespace empifisJsonAPI2
 
                 _logger.Info($"Received JSON request to /fullReceipt:\n{jsonString}");
 
-                // One device operation at a time; held through the Radison fiscal-info reads below.
+                // One device operation at a time; held through the custom-error fiscal-info reads below.
                 using var deviceLock = await app.Services.GetRequiredService<EmpifisComManager>().AcquireDeviceLockAsync();
 
                 try
@@ -651,29 +651,29 @@ namespace empifisJsonAPI2
                 }
 
                 object finalResponse;
-                if (isRadisonErrorMode)
+                if (isCustomErrorMode)
                 {
-                    _logger.Info("Radison error mode is ON. Creating ResponseJsonRadison.");
-                    var radisonResponse = new ResponseJsonRadison
+                    _logger.Info("Custom error mode is ON. Creating ResponseJsonCustom.");
+                    var customResponse = new ResponseJsonCustom
                     {
                         ErrorCode = jsonResponse.ErrorCode,
                         ErrorMessage = jsonResponse.ErrorMessage
                     };
 
                     var fiscalInfoCashRegister = app.Services.GetRequiredService<EmpifisComManager>().GetFiscalInfo(3);
-                    radisonResponse.CashRegisterNo = fiscalInfoCashRegister.message;
+                    customResponse.CashRegisterNo = fiscalInfoCashRegister.message;
 
                     var fiscalInfoReceiptNo = app.Services.GetRequiredService<EmpifisComManager>().GetFiscalInfo(2);
                     if (int.TryParse(fiscalInfoReceiptNo.message, out int recNo))
                     {
-                        radisonResponse.ReceiptNo = (recNo - 1).ToString();
+                        customResponse.ReceiptNo = (recNo - 1).ToString();
                     }
                     else
                     {
                         _logger.Warn($"Could not parse ReceiptNo from COM object: '{fiscalInfoReceiptNo.message}'");
-                        radisonResponse.ReceiptNo = "N/A";
+                        customResponse.ReceiptNo = "N/A";
                     }
-                    finalResponse = radisonResponse;
+                    finalResponse = customResponse;
                 }
                 else
                 {

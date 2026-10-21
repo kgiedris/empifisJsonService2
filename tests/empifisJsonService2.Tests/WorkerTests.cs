@@ -23,7 +23,7 @@ public sealed class WorkerTests : IDisposable
 
     private Worker CreateWorker() => new(_device, Options.Create(new AppConfig
     {
-        servicePort = new ServicePortConfig { port = "5006", file_mode = "on", radison_error = "off", com_timeout_seconds = 45 },
+        servicePort = new ServicePortConfig { port = "5006", file_mode = "on", custom_error = "off", com_timeout_seconds = 45 },
         JsonPathConfig = new JsonPathConfig { InFilePath = _in, OutFilePath = _out },
     }), new ReceiptProcessor(_device));
 

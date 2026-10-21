@@ -34,7 +34,7 @@ namespace empifisJsonAPI2
             _logger.Info("--- Final Configuration ---");
             _logger.Info($"Port: {_config.servicePort.port}");
             _logger.Info($"File Mode: {_config.servicePort.file_mode}");
-            _logger.Info($"Radisson Error: {_config.servicePort.radison_error}");
+            _logger.Info($"Custom Error: {_config.servicePort.custom_error}");
             _logger.Info($"COM Timeout (seconds): {_config.servicePort.com_timeout_seconds}");
             _logger.Info($"Input File Path: {_config.JsonPathConfig.InFilePath}");
             _logger.Info($"Output File Path: {_config.JsonPathConfig.OutFilePath}");
@@ -218,7 +218,7 @@ namespace empifisJsonAPI2
                 return;
             }
 
-            // One device operation at a time; held through the Radison fiscal-info reads below.
+            // One device operation at a time; held through the custom-error fiscal-info reads below.
             using var deviceLock = await _comManager.AcquireDeviceLockAsync();
 
             ResponseJson jsonResponse = new ResponseJson();
@@ -262,7 +262,7 @@ namespace empifisJsonAPI2
             }
         }
 
-        // Builds the response file content; in Radison mode this reads fiscal info from the device,
+        // Builds the response file content; in custom error mode this reads fiscal info from the device,
         // so the caller must hold the device lock.
         private string SerializeResponse(ResponseJson jsonResponse)
         {
@@ -272,13 +272,13 @@ namespace empifisJsonAPI2
                 Formatting = Formatting.Indented
             };
 
-            if (_config.servicePort.radison_error?.ToLower() != "on")
+            if (_config.servicePort.custom_error?.ToLower() != "on")
             {
                 return JsonConvert.SerializeObject(jsonResponse, jsonSerializerSettings);
             }
 
-            _logger.Info("Radison error mode is ON. Creating ResponseJsonRadison.");
-            var jsonResponseRadison = new ResponseJsonRadison
+            _logger.Info("Custom error mode is ON. Creating ResponseJsonCustom.");
+            var jsonResponseCustom = new ResponseJsonCustom
             {
                 ErrorCode = jsonResponse.ErrorCode,
                 ErrorMessage = jsonResponse.ErrorMessage
@@ -286,21 +286,21 @@ namespace empifisJsonAPI2
 
             // Get Fiscal Info for CashRegisterNo
             var fiscalInfoCashRegister = _comManager.GetFiscalInfo(3);
-            jsonResponseRadison.CashRegisterNo = fiscalInfoCashRegister.message;
+            jsonResponseCustom.CashRegisterNo = fiscalInfoCashRegister.message;
 
             // Get Fiscal Info for ReceiptNo
             var fiscalInfoReceiptNo = _comManager.GetFiscalInfo(2);
             if (int.TryParse(fiscalInfoReceiptNo.message, out int recNo))
             {
-                jsonResponseRadison.ReceiptNo = (recNo - 1).ToString();
+                jsonResponseCustom.ReceiptNo = (recNo - 1).ToString();
             }
             else
             {
                 _logger.Warn($"Could not parse ReceiptNo from COM object: '{fiscalInfoReceiptNo.message}'");
-                jsonResponseRadison.ReceiptNo = "N/A";
+                jsonResponseCustom.ReceiptNo = "N/A";
             }
 
-            return JsonConvert.SerializeObject(jsonResponseRadison, jsonSerializerSettings);
+            return JsonConvert.SerializeObject(jsonResponseCustom, jsonSerializerSettings);
         }
 
         // inReceipt123.json -> <OutFilePath>\outReceipt123.json

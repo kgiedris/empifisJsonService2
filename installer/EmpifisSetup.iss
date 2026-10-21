@@ -223,6 +223,42 @@ begin
     Result := S;
 end;
 
+{ Brings an existing config.json (which an update keeps) up to date: radison_error was renamed
+  custom_error, and the Cors block (any origin) is added when missing. A copy is saved as config.json.bak. }
+procedure MigrateConfig;
+var
+  Path, Json, Before: String;
+  Raw: AnsiString;
+  P: Integer;
+begin
+  Path := ExpandConstant('{app}\config.json');
+  if not LoadStringFromFile(Path, Raw) then
+    Exit;
+  Json := String(Raw);
+  Before := Json;
+  if (Pos('"custom_error"', Json) = 0) and (Pos('"radison_error"', Json) > 0) then
+    StringChangeEx(Json, '"radison_error"', '"custom_error"', True);
+  if Pos('"Cors"', Json) = 0 then
+  begin
+    P := Length(Json);
+    while (P > 0) and (Json[P] <> '}') do
+      P := P - 1;
+    if P > 0 then
+    begin
+      Json := TrimRight(Copy(Json, 1, P - 1));
+      if (Json <> '') and (Json[Length(Json)] <> '{') then
+        Json := Json + ',';
+      Json := Json + #13#10 + '  "Cors": {' + #13#10 + '    "AllowedOrigins": "*"' + #13#10 + '  }' + #13#10 + '}' + #13#10;
+    end;
+  end;
+  if Json <> Before then
+  begin
+    FileCopy(Path, Path + '.bak', False);
+    if not SaveStringToFile(Path, AnsiString(Json), False) then
+      Log('Could not update ' + Path);
+  end;
+end;
+
 { The file mode folders from config.json; the POS (a normal user) must be able to write requests there. }
 procedure CreateFileModeFolders;
 var
@@ -301,6 +337,7 @@ procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
   begin
+    MigrateConfig;
     CreateFileModeFolders;
     RegisterService;
     if WizardIsTaskSelected('firewall') then

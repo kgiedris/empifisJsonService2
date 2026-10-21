@@ -14,7 +14,7 @@ namespace empifisJsonAPI2
     {
         public string port { get; set; }
         public string file_mode { get; set; }
-        public string radison_error { get; set; }
+        public string custom_error { get; set; }
         public int com_timeout_seconds { get; set; }
     }
 

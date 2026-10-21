@@ -76,7 +76,7 @@ var defaultSettings = new Dictionary<string, string?>
 {
     ["servicePort:port"] = "5006",
     ["servicePort:file_mode"] = "on",
-    ["servicePort:radison_error"] = "off",
+    ["servicePort:custom_error"] = "off",
     ["servicePort:com_timeout_seconds"] = "45",
     ["JsonPathConfig:InFilePath"] = "C:\\Altera\\json\\in\\",
     ["JsonPathConfig:OutFilePath"] = "C:\\Altera\\json\\out\\",

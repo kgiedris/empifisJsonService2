@@ -602,14 +602,14 @@ namespace empifisJsonAPI2.JsonObjects
         }
     }
 
-    public class ResponseJsonRadison
+    public class ResponseJsonCustom
     {
         public int ErrorCode { get; set; }
         public string ErrorMessage { get; set; }
         public string CashRegisterNo { get; set; }
         public string ReceiptNo { get; set; }
 
-        public ResponseJsonRadison()
+        public ResponseJsonCustom()
         {
             this.ErrorMessage = string.Empty;
             this.CashRegisterNo = string.Empty;
