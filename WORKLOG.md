@@ -1,6 +1,6 @@
 # empifisJsonService2 – work log and plan
 
-Handoff notes so work can continue if a session is lost. Last updated 2026-10-19 (version 2.3.6).
+Handoff notes so work can continue if a session is lost. Last updated 2026-10-21 (version 2.3.7).
 
 ## What the service is
 
@@ -18,7 +18,7 @@ Windows service that accepts receipts as JSON (HTTP on port 5006: `/fullReceipt`
 
 ## Build, test, release, deploy
 
-- Build/test: `dotnet build`, `dotnet test tests\empifisJsonService2.Tests` (29 tests, fake fiscal device; needs x86 .NET 10 runtimes, installed on this PC).
+- Build/test: `dotnet build`, `dotnet test tests\empifisJsonService2.Tests` (30 tests, fake fiscal device; needs x86 .NET 10 runtimes, installed on this PC).
 - Till package: `dotnet publish empifisJsonService2.csproj -p:PublishProfile=Till` → `bin\publish\till\` (self-contained win-x86, includes `install-and-update.bat`, `run-service.bat`, the manual).
 - Release: bump `<Version>` in the csproj and the manual's cover version, push, then `gh release create vX.Y.Z --target master`. `.github/workflows/release.yml` tests, builds with the latest .NET 10 SDK and attaches `empifisJsonService2-X.Y.Z-win-x86.zip` and `EmpifisJsonSetup-X.Y.Z.exe` (ReceiptTester from its master branch). Latest: v2.3.6. `build.yml` runs on every push. Dependabot: weekly NuGet, monthly Actions.
 - Deploy: stop the service, copy the package into `C:\Altera\EmpifisJsonAPI` (keep `config.json`), run `install-and-update.bat` as admin (checks EmpiFisX registration, .NET runtime, config; recreates the service with manual start and restart-on-failure).
@@ -27,6 +27,7 @@ Windows service that accepts receipts as JSON (HTTP on port 5006: `/fullReceipt`
 
 - **2.3.5 (2026-10-16):** `Access-Control-Allow-Private-Network: true` is answered to Chrome's Private Network Access preflight; the installer's default `config.json` has `Cors.AllowedOrigins` = `*` (the built-in default in `appsettings.json` stays empty).
 - **2.3.6 (2026-10-19):** bug fix – a receipt that the device answered with an error was reported as success. Seen in a customer log: card payment declined (`ECRServer ... ResultCode: 1`), `EndFiscalReceiptEx` returned RC=1, EmpiFis voided the receipt (number 18 used, receipt "PANAIKINTAS") and the next number moved 18 → 19; the duplicate-protection below read that as "receipt printed" and answered 0. Now that protection applies **only after our own COM timeout (555/556)**; every other non-zero code from EmpiFis is returned to the POS as is (and `ResetFiscal` is called). Code 1 has no description in `ErrorCodes.cs` (none known) → message `Error 1.`. Test `ErrorFromTheDeviceOnEnd_EvenWhenTheReceiptNumberMoved_IsReturnedAsTheError`.
+- **2.3.7 (2026-10-21):** bug fix – an item without `itemGroup` (and a return without `Group`) was sent to EmpiFis with the default `"GR"` (since 2.1.7, when `PrintRecItem` became `PrintRecItemEx`; before that no group was sent at all). The defaults are removed: a missing group goes to the device as `null` (an explicit value is passed on unchanged); no `?? ""` guard on purpose. **Not verified on hardware:** this PC's device answered 511 ERR_HARDWARE_SM (no security module) at `BeginFiscalReceipt`, so `PrintRecItemEx` with null was never reached – if a device rejects `null`, send `""` instead. Test `ReceiptItem_WithoutItemGroup_SendsNoGroup_AndAnExplicitGroupIsPassedOn`. The manual's cover version is still 2.3.6 (edit in Word).
 
 ## Done on 2026-09-29 (2.1.7 → 2.3.1, all on master and GitHub)
 

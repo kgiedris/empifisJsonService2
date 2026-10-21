@@ -176,7 +176,7 @@ namespace empifisJsonAPI2.JsonObjects
         public double ItemPrice { get; set; }
         public int VatID { get; set; }
         public string ItemUnit { get; set; } = "vnt";
-        public string ItemGroup { get; set; } = "GR";
+        public string ItemGroup { get; set; }
         public ItemDiscount ItemDiscount { get; set; }
         public List<CommentLines> CommentLines { get; set; }
 
@@ -184,7 +184,6 @@ namespace empifisJsonAPI2.JsonObjects
         {
             this.ItemDescription = string.Empty;
             this.ItemUnit = "vnt";
-            this.ItemGroup = "GR";
             // Removed default initialization of ItemDiscount
             this.CommentLines = new List<CommentLines>();
         }
@@ -345,7 +344,7 @@ namespace empifisJsonAPI2.JsonObjects
         public double Price { get; set; }
         public int Vat { get; set; }
         public string Dimension { get; set; }
-        public string Group { get; set; } = "GR";
+        public string Group { get; set; }
         public double CurrPercent { get; set; }
         public double CurrAbsolute { get; set; }
     }

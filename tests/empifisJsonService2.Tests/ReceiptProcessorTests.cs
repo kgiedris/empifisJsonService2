@@ -157,6 +157,29 @@ public class ReceiptProcessorTests
     }
 
     [Fact]
+    public void ReceiptItem_WithoutItemGroup_SendsNoGroup_AndAnExplicitGroupIsPassedOn()
+    {
+        var device = new FakeFiscalDevice();
+        const string json = """
+            {
+              "receiptType": "fiscal",
+              "fiscalReceipt": {
+                "receiptItem": [
+                  { "itemDescription": "A", "itemQuantity": 1, "itemPrice": 1, "vatID": 0 },
+                  { "itemDescription": "B", "itemQuantity": 1, "itemPrice": 1, "vatID": 0, "itemGroup": "GR" }
+                ],
+                "receiptPayment": { "cash": 2 }
+              }
+            }
+            """;
+
+        Process(device, json);
+
+        Assert.Contains("PrintRecItemEx(A, 1, 1, 0, vnt, )", device.Calls);
+        Assert.Contains("PrintRecItemEx(B, 1, 1, 0, vnt, GR)", device.Calls);
+    }
+
+    [Fact]
     public void FullFiscalReceipt_CallsEverySectionInOrder()
     {
         var device = new FakeFiscalDevice();
@@ -185,7 +208,7 @@ public class ReceiptProcessorTests
         Assert.Equal(new[]
         {
             "GetFiscalInfo(2)", "BeginFiscalReceipt()", "PrintCommentLine(Top, 64)",
-            "PrintRecItemEx(Milk, 1, 2.5, 0, vnt, GR)", "PrintCommentLine(Item note, 72)",
+            "PrintRecItemEx(Milk, 1, 2.5, 0, vnt, )", "PrintCommentLine(Item note, 72)",
             "PrintDepositReceive(Bottle, 1, 0.1)",
             "PrintTareDeposit(Crate, 1, 3)", "PrintCommentLine(Tare note, 64)",
             "PrintTareDepositVoid(Crate, 1, 3)",
